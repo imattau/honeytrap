@@ -14,7 +14,6 @@ export class FeedOrchestrator implements FeedOrchestratorApi {
   private profiles: Record<string, ProfileMetadata> = {};
   private oldest?: number;
   private paused = false;
-  private pausedByBuffer = false;
   private profileQueue = new Set<string>();
   private profileInflight = new Set<string>();
   private profileDrainTimer?: number;
@@ -45,7 +44,6 @@ export class FeedOrchestrator implements FeedOrchestratorApi {
     this.pending = [];
     this.oldest = undefined;
     this.hydrated = false;
-    this.pausedByBuffer = false;
   }
 
   subscribe(
@@ -79,9 +77,6 @@ export class FeedOrchestrator implements FeedOrchestratorApi {
         if (this.pending.length > MAX_BUFFER) {
           this.pending.length = MAX_BUFFER;
           onPending?.(this.pending.length);
-          if (!this.pausedByBuffer) {
-            this.pausedByBuffer = true;
-          }
         }
         this.profileQueue.add(event.pubkey);
         if (!this.hydrated) {
@@ -103,8 +98,6 @@ export class FeedOrchestrator implements FeedOrchestratorApi {
   }
 
   resumeIfBuffered() {
-    if (!this.pausedByBuffer) return;
-    this.pausedByBuffer = false;
   }
 
   flushPending(getEvents: () => NostrEvent[], onUpdate: (events: NostrEvent[]) => void) {
@@ -112,7 +105,6 @@ export class FeedOrchestrator implements FeedOrchestratorApi {
     const merged = this.flush(getEvents());
     onUpdate(merged);
     // pending count becomes zero after flush
-    this.resumeIfBuffered();
   }
 
   async loadOlder(
@@ -126,7 +118,7 @@ export class FeedOrchestrator implements FeedOrchestratorApi {
     getEvents: () => NostrEvent[],
     onUpdate: (events: NostrEvent[]) => void
   ) {
-    if (this.pausedByBuffer || !this.oldest) return;
+    if (!this.oldest) return;
     const authors = resolveAuthors({ follows, followers, feedMode, listId, lists });
     const older = await this.nostr.fetchOlderTimeline({ until: this.oldest - 1, authors, limit: 40 });
     const unique = older.filter((event) => !this.knownIds.has(event.id) && !this.isBlocked?.(event.pubkey));
