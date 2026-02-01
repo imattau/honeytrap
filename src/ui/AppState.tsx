@@ -46,7 +46,7 @@ interface AppStateValue {
   saveKeyRecord: (record: KeyRecord) => Promise<void>;
   clearKeys: () => Promise<void>;
   connectNip07: () => Promise<void>;
-  connectNip46: (input: string, onAuthUrl?: (url: string) => void) => Promise<string>;
+  connectNip46: (input: string, onAuthUrl?: (url: string) => void, clientSecretKey?: Uint8Array) => Promise<string>;
   disconnectNip46: () => void;
   loadOlder: () => Promise<void>;
   loadThread: (eventId: string) => Promise<ThreadNode[]>;
@@ -327,8 +327,8 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     nip46SessionRef.current = null;
   };
 
-  const connectRemoteSigner = async (input: string, onAuthUrl?: (url: string) => void) => {
-    const session = await connectNip46(input, onAuthUrl);
+  const connectRemoteSigner = async (input: string, onAuthUrl?: (url: string) => void, clientSecretKey?: Uint8Array) => {
+    const session = await connectNip46(input, onAuthUrl, clientSecretKey);
     nip46SessionRef.current = session;
     await saveKeyRecord({ npub: session.pubkey });
     return session.pubkey;

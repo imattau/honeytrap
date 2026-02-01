@@ -1,7 +1,7 @@
-import { generateSecretKey } from 'nostr-tools';
-import { BunkerSigner, parseBunkerInput } from 'nostr-tools/nip46';
+import { generateSecretKey, getPublicKey } from 'nostr-tools';
+import { BunkerSigner, createNostrConnectURI, parseBunkerInput } from 'nostr-tools/nip46';
 import { SimplePool } from 'nostr-tools/pool';
-import { getPublicKey, nip19 } from 'nostr-tools';
+import { nip19 } from 'nostr-tools';
 import { bytesToHex } from 'nostr-tools/utils';
 import type { KeyRecord } from '../storage/types';
 
@@ -10,10 +10,14 @@ export interface Nip46Session {
   pubkey: string;
 }
 
-export async function connectNip46(input: string, onAuthUrl?: (url: string) => void): Promise<Nip46Session> {
+export async function connectNip46(
+  input: string,
+  onAuthUrl?: (url: string) => void,
+  clientSecretKey?: Uint8Array
+): Promise<Nip46Session> {
   const trimmed = input.trim();
   if (!trimmed) throw new Error('Missing bunker/nostrconnect URI');
-  const secretKey = generateSecretKey();
+  const secretKey = clientSecretKey ?? generateSecretKey();
   const pool = new SimplePool({ enablePing: true, enableReconnect: true });
   const params = {
     pool,
@@ -27,7 +31,7 @@ export async function connectNip46(input: string, onAuthUrl?: (url: string) => v
     const uri = new URL(trimmed);
     const relays = uri.searchParams.getAll('relay');
     if (relays.length === 0) throw new Error('nostrconnect URI missing relay parameter');
-    signer = await BunkerSigner.fromURI(secretKey, trimmed, params, 30_000);
+    signer = await BunkerSigner.fromURI(secretKey, trimmed, params, 120_000);
   } else {
     const pointer = await parseBunkerInput(trimmed);
     if (!pointer) throw new Error('Invalid bunker address');
@@ -38,6 +42,35 @@ export async function connectNip46(input: string, onAuthUrl?: (url: string) => v
   }
   const pubkey = await signer.getPublicKey();
   return { signer, pubkey };
+}
+
+export function createNostrConnectRequest({
+  relays,
+  perms,
+  name,
+  url,
+  image
+}: {
+  relays: string[];
+  perms?: string[];
+  name?: string;
+  url?: string;
+  image?: string;
+}) {
+  if (!relays || relays.length === 0) throw new Error('Missing relays for nostrconnect');
+  const secretKey = generateSecretKey();
+  const secret = bytesToHex(generateSecretKey());
+  const clientPubkey = getPublicKey(secretKey);
+  const uri = createNostrConnectURI({
+    clientPubkey,
+    relays,
+    secret,
+    perms,
+    name,
+    url,
+    image
+  });
+  return { uri, secretKey };
 }
 
 export async function getNip07Pubkey(): Promise<string> {

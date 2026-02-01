@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { KeyRound, QrCode, ShieldAlert, UserCircle, X } from 'lucide-react';
 import { QRCodeCanvas } from 'qrcode.react';
 import { useAppState } from './AppState';
-import { decodeKey } from '../nostr/auth';
+import { createNostrConnectRequest, decodeKey } from '../nostr/auth';
 import { MenuState } from './MenuState';
 import { MediaRelaysSection } from './menu/MediaRelaysSection';
 import { NostrRelaysSection } from './menu/NostrRelaysSection';
@@ -36,6 +36,7 @@ export function Drawer() {
   const [nsecInput, setNsecInput] = useState('');
   const [bunkerInput, setBunkerInput] = useState('');
   const [bunkerQr, setBunkerQr] = useState('');
+  const [nostrConnectUri, setNostrConnectUri] = useState('');
   const [connectStatus, setConnectStatus] = useState<string | null>(null);
   const [savedSection, setSavedSection] = useState<'relays' | 'media' | 'torrent' | 'wallet' | null>(null);
   const [isWide, setIsWide] = useState(false);
@@ -111,6 +112,39 @@ export function Drawer() {
           setBunkerQr(authUrl);
         }
       });
+      setConnectStatus(`Connected as ${pubkey.slice(0, 10)}…`);
+    } catch (error) {
+      setConnectStatus(error instanceof Error ? error.message : 'Failed to connect');
+    }
+  };
+
+  const handleSignerConnect = async () => {
+    setConnectStatus('Waiting for signer approval...');
+    try {
+      const origin = window.location.origin;
+      const image = `${origin}/assets/honeytrap_logo_256.png`;
+      const { uri, secretKey } = createNostrConnectRequest({
+        relays: settings.relays,
+        perms: ['sign_event', 'nip44_encrypt', 'nip44_decrypt'],
+        name: 'Honeytrap',
+        url: origin,
+        image
+      });
+      setNostrConnectUri(uri);
+      setBunkerQr(uri);
+      if (isTouch) {
+        window.location.href = uri;
+      }
+      const pubkey = await connectNip46(uri, (authUrl) => {
+        setConnectStatus(`Approve in signer: ${authUrl}`);
+        if (isTouch) {
+          try {
+            window.location.href = authUrl;
+          } catch {
+            // ignore
+          }
+        }
+      }, secretKey);
       setConnectStatus(`Connected as ${pubkey.slice(0, 10)}…`);
     } catch (error) {
       setConnectStatus(error instanceof Error ? error.message : 'Failed to connect');
@@ -211,6 +245,17 @@ export function Drawer() {
                 {isTouch && (
                   <button className="menu-button" onClick={handleSignerApp}>
                     Open Signer App
+                  </button>
+                )}
+              </div>
+              <div className="menu-sub">Or start a signer app flow:</div>
+              <div className="menu-row">
+                <button className="menu-button" onClick={handleSignerConnect}>
+                  Generate Signer Link
+                </button>
+                {nostrConnectUri && (
+                  <button className="menu-button" onClick={() => setBunkerQr(nostrConnectUri)}>
+                    Show Signer QR
                   </button>
                 )}
               </div>
