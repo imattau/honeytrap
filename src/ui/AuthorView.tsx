@@ -22,6 +22,7 @@ export function AuthorView() {
     toggleFollow,
     toggleBlock,
     publishPost,
+    publishReply,
     mediaRelayList,
     settings,
     attachMedia
@@ -30,6 +31,7 @@ export function AuthorView() {
   const [profile, setProfile] = useState<ProfileMetadata | undefined>(undefined);
   const [loading, setLoading] = useState(true);
   const [composerOpen, setComposerOpen] = useState(false);
+  const [replyTarget, setReplyTarget] = useState<NostrEvent | undefined>(undefined);
   const eventsRef = useRef<NostrEvent[]>([]);
   const resolvedPubkey = useMemo(() => {
     if (!pubkey) return '';
@@ -136,15 +138,28 @@ export function AuthorView() {
               onOpenThread={() => navigate(`/thread/${event.id}`, { state: { event } })}
               showActions
               actionsPosition="top"
+              onReply={() => {
+                setReplyTarget(event);
+                setComposerOpen(true);
+              }}
             />
           </div>
         )}
       />
-      <FabButton onClick={() => setComposerOpen(true)} />
+      <FabButton
+        onClick={() => {
+          setReplyTarget(undefined);
+          setComposerOpen(true);
+        }}
+      />
       <Composer
         open={composerOpen}
-        onClose={() => setComposerOpen(false)}
-        onSubmit={(input) => publishPost(input)}
+        replyTo={replyTarget}
+        onClose={() => {
+          setComposerOpen(false);
+          setReplyTarget(undefined);
+        }}
+        onSubmit={(input) => (replyTarget ? publishReply(input, replyTarget) : publishPost(input))}
         mediaRelays={mediaRelayList.length > 0 ? mediaRelayList : settings.mediaRelays}
         onAttachMedia={attachMedia}
       />

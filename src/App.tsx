@@ -9,6 +9,7 @@ import { AuthorView } from './ui/AuthorView';
 import { HashtagView } from './ui/HashtagView';
 import { FabButton } from './ui/FabButton';
 import { Composer } from './ui/Composer';
+import type { NostrEvent } from './nostr/types';
 
 const FEED_SCROLL_KEY = 'honeytrap:feed-scroll-top';
 
@@ -22,11 +23,13 @@ function Feed() {
     feedLoading,
     pendingCount,
     publishPost,
+    publishReply,
     mediaRelayList,
     settings,
     attachMedia
   } = useAppState();
   const [composerOpen, setComposerOpen] = useState(false);
+  const [replyTarget, setReplyTarget] = useState<NostrEvent | undefined>(undefined);
   const navigate = useNavigate();
   const location = useLocation();
   const virtuosoRef = useRef<VirtuosoHandle | null>(null);
@@ -120,15 +123,30 @@ function Feed() {
               profile={profiles[event.pubkey]}
               onSelect={selectEvent}
               onOpenThread={() => navigate(`/thread/${event.id}`, { state: { event } })}
+              showActions
+              actionsPosition="top"
+              onReply={() => {
+                setReplyTarget(event);
+                setComposerOpen(true);
+              }}
             />
           </div>
         )}
       />
-      <FabButton onClick={() => setComposerOpen(true)} />
+      <FabButton
+        onClick={() => {
+          setReplyTarget(undefined);
+          setComposerOpen(true);
+        }}
+      />
       <Composer
         open={composerOpen}
-        onClose={() => setComposerOpen(false)}
-        onSubmit={(input) => publishPost(input)}
+        replyTo={replyTarget}
+        onClose={() => {
+          setComposerOpen(false);
+          setReplyTarget(undefined);
+        }}
+        onSubmit={(input) => (replyTarget ? publishReply(input, replyTarget) : publishPost(input))}
         mediaRelays={mediaRelayList.length > 0 ? mediaRelayList : settings.mediaRelays}
         onAttachMedia={attachMedia}
       />

@@ -5,14 +5,17 @@ import { ArrowLeft, Hash } from 'lucide-react';
 import type { NostrEvent } from '../nostr/types';
 import { useAppState } from './AppState';
 import { PostCard } from './PostCard';
+import { Composer } from './Composer';
 
 export function HashtagView() {
   const { tag } = useParams<{ tag: string }>();
   const navigate = useNavigate();
-  const { hashtagService, profiles, selectEvent } = useAppState();
+  const { hashtagService, profiles, selectEvent, publishReply, mediaRelayList, settings, attachMedia } = useAppState();
   const [events, setEvents] = useState<NostrEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const eventsRef = useRef<NostrEvent[]>([]);
+  const [composerOpen, setComposerOpen] = useState(false);
+  const [replyTarget, setReplyTarget] = useState<NostrEvent | undefined>(undefined);
 
   const normalized = useMemo(() => (tag ?? '').replace(/^#/, '').toLowerCase(), [tag]);
 
@@ -76,9 +79,24 @@ export function HashtagView() {
               onOpenThread={() => navigate(`/thread/${event.id}`, { state: { event } })}
               showActions
               actionsPosition="top"
+              onReply={() => {
+                setReplyTarget(event);
+                setComposerOpen(true);
+              }}
             />
           </div>
         )}
+      />
+      <Composer
+        open={composerOpen}
+        replyTo={replyTarget}
+        onClose={() => {
+          setComposerOpen(false);
+          setReplyTarget(undefined);
+        }}
+        onSubmit={(input) => (replyTarget ? publishReply(input, replyTarget) : Promise.resolve())}
+        mediaRelays={mediaRelayList.length > 0 ? mediaRelayList : settings.mediaRelays}
+        onAttachMedia={attachMedia}
       />
     </div>
   );
