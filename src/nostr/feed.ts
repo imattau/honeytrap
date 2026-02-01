@@ -4,6 +4,7 @@ import { FeedService } from './service';
 import { verifyEvent } from 'nostr-tools';
 import type { TransportStore } from './transport';
 import type { FeedOrchestratorApi } from './contracts';
+import type { NostrCache } from './cache';
 
 const MAX_EVENTS = 300;
 const MAX_BUFFER = 400;
@@ -20,6 +21,7 @@ export class FeedOrchestrator implements FeedOrchestratorApi {
   private maxProfileInflight = 2;
   private hydrated = false;
   private lastContext?: { follows: string[]; followers: string[]; feedMode: 'all' | 'follows' | 'followers' | 'both'; listId?: string; lists?: ListDescriptor[]; tags?: string[] };
+  private cache?: NostrCache;
   private lastGetEvents?: () => NostrEvent[];
   private lastOnUpdate?: (events: NostrEvent[]) => void;
   private lastOnProfiles?: (profiles: Record<string, ProfileMetadata>) => void;
@@ -28,8 +30,11 @@ export class FeedOrchestrator implements FeedOrchestratorApi {
     private nostr: NostrClient,
     private service: FeedService,
     private transport?: TransportStore,
-    private isBlocked?: (pubkey: string) => boolean
-  ) {}
+    private isBlocked?: (pubkey: string) => boolean,
+    cache?: NostrCache
+  ) {
+    this.cache = cache;
+  }
 
   getProfiles() {
     return this.profiles;
@@ -66,6 +71,17 @@ export class FeedOrchestrator implements FeedOrchestratorApi {
     this.lastGetEvents = getEvents;
     this.lastOnUpdate = onUpdate;
     this.lastOnProfiles = onProfiles;
+    this.cache?.getRecentEvents()
+      .then((cached) => {
+        if (!cached || cached.length === 0) return;
+        const filtered = cached.filter((event) => !this.isBlocked?.(event.pubkey));
+        if (filtered.length === 0) return;
+        filtered.forEach((event) => this.knownIds.add(event.id));
+        const merged = this.mergeEvents(getEvents(), filtered);
+        onUpdate(merged);
+      })
+      .catch(() => null);
+
     this.service.subscribeTimeline({
       authors: resolveAuthors({ follows, followers, feedMode, listId, lists }),
       tags,
@@ -130,6 +146,7 @@ export class FeedOrchestrator implements FeedOrchestratorApi {
     unique.forEach((event) => this.transport?.mark(event.id, { relay: true, verified: verifyEvent(event as any) }));
     const merged = this.mergeEvents(getEvents(), unique);
     onUpdate(merged);
+    this.cache?.setRecentEvents(merged.slice(0, 120)).catch(() => null);
   }
 
   ensureProfile(pubkey: string, onProfile: (profiles: Record<string, ProfileMetadata>) => void) {
@@ -175,7 +192,9 @@ export class FeedOrchestrator implements FeedOrchestratorApi {
     if (this.pending.length === 0) return existing;
     const incoming = this.pending.splice(0, this.pending.length)
       .filter((event) => !this.isBlocked?.(event.pubkey));
-    return this.mergeEvents(existing, incoming);
+    const merged = this.mergeEvents(existing, incoming);
+    this.cache?.setRecentEvents(merged.slice(0, 120)).catch(() => null);
+    return merged;
   }
 
   private mergeEvents(existing: NostrEvent[], incoming: NostrEvent[]): NostrEvent[] {

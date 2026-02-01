@@ -46,6 +46,8 @@ export interface NostrCacheApi {
   setRelayList(pubkey: string, list: string[]): Promise<void>;
   getMediaRelayList(pubkey: string): Promise<string[] | undefined>;
   setMediaRelayList(pubkey: string, list: string[]): Promise<void>;
+  getRecentEvents(): Promise<NostrEvent[] | undefined>;
+  setRecentEvents(events: NostrEvent[]): Promise<void>;
   purgeExpired(): Promise<void>;
 }
 

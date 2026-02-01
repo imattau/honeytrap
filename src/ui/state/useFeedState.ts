@@ -6,19 +6,22 @@ import { FeedService } from '../../nostr/service';
 import { FeedOrchestrator } from '../../nostr/feed';
 import type { TransportStore } from '../../nostr/transport';
 import { SocialGraph } from '../../nostr/social';
+import type { NostrCache } from '../../nostr/cache';
 
 export function useFeedState({
   nostr,
   transportStore,
   settings,
   followers,
-  isBlocked
+  isBlocked,
+  cache
 }: {
   nostr: NostrClient;
   transportStore: TransportStore;
   settings: AppSettings;
   followers: string[];
   isBlocked: (pubkey: string) => boolean;
+  cache?: NostrCache;
 }) {
   const [events, setEvents] = useState<NostrEvent[]>([]);
   const [profiles, setProfiles] = useState<Record<string, ProfileMetadata>>({});
@@ -30,8 +33,8 @@ export function useFeedState({
 
   const feedService = useMemo(() => new FeedService(nostr), [nostr]);
   const orchestrator = useMemo(
-    () => new FeedOrchestrator(nostr, feedService, transportStore, isBlocked),
-    [nostr, feedService, transportStore, isBlocked]
+    () => new FeedOrchestrator(nostr, feedService, transportStore, isBlocked, cache),
+    [nostr, feedService, transportStore, isBlocked, cache]
   );
 
   const eventsRef = useRef<NostrEvent[]>([]);

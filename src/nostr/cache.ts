@@ -7,6 +7,7 @@ const TTL_REPLIES = 5 * 60 * 1000;
 const TTL_FOLLOWERS = 10 * 60 * 1000;
 const TTL_FOLLOWING = 10 * 60 * 1000;
 const TTL_RELAYLIST = 10 * 60 * 1000;
+const TTL_RECENT = 5 * 60 * 1000;
 
 import type { NostrCacheApi } from './contracts';
 
@@ -18,6 +19,7 @@ export class NostrCache implements NostrCacheApi {
   private following = new CacheStore<string[]>({ maxEntries: 200, evictionPolicy: 'fifo' });
   private relayList = new CacheStore<string[]>({ maxEntries: 200, evictionPolicy: 'fifo' });
   private mediaRelayList = new CacheStore<string[]>({ maxEntries: 200, evictionPolicy: 'fifo' });
+  private recentEvents = new CacheStore<NostrEvent[]>({ maxEntries: 20, evictionPolicy: 'lru' });
 
   async getProfile(pubkey: string) {
     return this.profiles.get(`profile:${pubkey}`);
@@ -75,6 +77,14 @@ export class NostrCache implements NostrCacheApi {
     await this.mediaRelayList.set(`mediarelaylist:${pubkey}`, list, TTL_RELAYLIST);
   }
 
+  async getRecentEvents() {
+    return this.recentEvents.get('recent:feed');
+  }
+
+  async setRecentEvents(events: NostrEvent[]) {
+    await this.recentEvents.set('recent:feed', events, TTL_RECENT);
+  }
+
   async purgeExpired() {
     await Promise.all([
       this.profiles.purgeExpired(),
@@ -83,7 +93,8 @@ export class NostrCache implements NostrCacheApi {
       this.followers.purgeExpired(),
       this.following.purgeExpired(),
       this.relayList.purgeExpired(),
-      this.mediaRelayList.purgeExpired()
+      this.mediaRelayList.purgeExpired(),
+      this.recentEvents.purgeExpired()
     ]);
   }
 }

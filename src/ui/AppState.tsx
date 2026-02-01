@@ -109,7 +109,8 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     transportStore,
     settings,
     followers,
-    isBlocked: isBlockedRef
+    isBlocked: isBlockedRef,
+    cache: nostrCache
   });
 
   const { relayList, mediaRelayList, relayStatus, refreshRelayStatus } = useRelayState({

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { KeyRound, QrCode, ShieldAlert, UserCircle, X } from 'lucide-react';
 import { QRCodeCanvas } from 'qrcode.react';
 import { useAppState } from './AppState';
@@ -46,6 +46,8 @@ export function Drawer() {
   const [menuState, setMenuState] = useState(() => buildMenuState(settings, relayList, mediaRelayList));
   const [relaysOpen, setRelaysOpen] = useState(false);
   const [touchStart, setTouchStart] = useState<number | null>(null);
+  const touchStartXRef = useRef<number | null>(null);
+  const touchScrollTopRef = useRef<number>(0);
   const fallbackAvatar = '/assets/honeytrap_logo_256.png';
   const headerImage = '/assets/honeytrap_header_960.png';
 
@@ -206,13 +208,36 @@ export function Drawer() {
         className={`top-drawer ${open ? 'open' : ''}`}
         onTouchStart={(event) => {
           if (isWide) return;
-          setTouchStart(event.touches[0]?.clientY ?? null);
+          const touch = event.touches[0];
+          setTouchStart(touch?.clientY ?? null);
+          touchStartXRef.current = touch?.clientX ?? null;
+          touchScrollTopRef.current = (event.currentTarget as HTMLDivElement).scrollTop ?? 0;
+        }}
+        onTouchMove={(event) => {
+          if (isWide || touchStart === null) return;
+          if (touchScrollTopRef.current > 4) return;
+          const touch = event.touches[0];
+          const currentY = touch?.clientY ?? touchStart;
+          const currentX = touch?.clientX ?? touchStartXRef.current ?? 0;
+          const deltaY = currentY - touchStart;
+          const deltaX = currentX - (touchStartXRef.current ?? currentX);
+          if (deltaY < -120 && Math.abs(deltaX) < 40) {
+            setOpen(false);
+            setTouchStart(null);
+          }
         }}
         onTouchEnd={(event) => {
           if (isWide || touchStart === null) return;
-          const endY = event.changedTouches[0]?.clientY ?? touchStart;
-          if (touchStart - endY > 60) setOpen(false);
+          if (touchScrollTopRef.current <= 4) {
+            const endTouch = event.changedTouches[0];
+            const endY = endTouch?.clientY ?? touchStart;
+            const endX = endTouch?.clientX ?? touchStartXRef.current ?? 0;
+            const deltaY = endY - touchStart;
+            const deltaX = endX - (touchStartXRef.current ?? endX);
+            if (deltaY < -120 && Math.abs(deltaX) < 40) setOpen(false);
+          }
           setTouchStart(null);
+          touchStartXRef.current = null;
         }}
       >
         {!isWide && (
@@ -287,11 +312,16 @@ export function Drawer() {
                   className="drawer-author"
                   role="button"
                   tabIndex={0}
-                  onClick={() => keys?.npub && navigate(`/author/${keys.npub}`)}
+                  onClick={() => {
+                    if (!keys?.npub) return;
+                    navigate(`/author/${keys.npub}`);
+                    if (!isWide) setOpen(false);
+                  }}
                   onKeyDown={(event) => {
                     if (event.key === 'Enter' || event.key === ' ') {
                       event.preventDefault();
                       if (keys?.npub) navigate(`/author/${keys.npub}`);
+                      if (!isWide) setOpen(false);
                     }
                   }}
                 >

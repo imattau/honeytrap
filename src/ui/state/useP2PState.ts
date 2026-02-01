@@ -122,13 +122,13 @@ export function useP2PState({
 
   const reseedTorrent = (magnet: string) => {
     const client = webtorrentHub.getClient();
-    if (!client) throw new Error('WebTorrent disabled');
+    torrentRegistry.start({ magnet, mode: 'seed' });
+    if (!client) {
+      torrentRegistry.finish(magnet);
+      throw new Error('WebTorrent disabled');
+    }
     webtorrentHub.ensure(magnet, (torrent) => {
-      torrentRegistry.start({
-        magnet,
-        mode: 'seed',
-        name: torrent.name
-      });
+      torrentRegistry.update(magnet, { name: torrent.name });
       const update = () => {
         torrentRegistry.update(magnet, {
           peers: torrent.numPeers ?? 0,
