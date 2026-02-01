@@ -53,7 +53,8 @@ export interface NostrCacheApi {
 }
 
 export interface FeedServiceApi {
-  subscribeTimeline(input: { authors?: string[]; tags?: string[]; onEvent: (event: NostrEvent) => void }): void;
+  setRelays(relays: string[]): void;
+  subscribeTimeline(input: { authors?: string[]; tags?: string[]; onEvent: (event: NostrEvent) => void; onClose?: (reasons: string[]) => void }): void;
   stop(): void;
 }
 

@@ -1,8 +1,7 @@
 import type { NostrEvent, ProfileMetadata, ListDescriptor } from './types';
 import { NostrClient } from './client';
-import { FeedService } from './service';
 import type { TransportStore } from './transport';
-import type { FeedOrchestratorApi } from './contracts';
+import type { FeedOrchestratorApi, FeedServiceApi } from './contracts';
 import type { NostrCache } from './cache';
 import { AsyncEventVerifier, type EventVerifier } from './eventVerifier';
 
@@ -17,7 +16,7 @@ export class FeedOrchestrator implements FeedOrchestratorApi {
   private paused = false;
   private profileQueue = new Set<string>();
   private profileInflight = new Set<string>();
-  private profileDrainTimer?: number;
+  private profileDrainTimer?: ReturnType<typeof setTimeout>;
   private maxProfileInflight = 2;
   private hydrated = false;
   private lastContext?: { follows: string[]; followers: string[]; feedMode: 'all' | 'follows' | 'followers' | 'both'; listId?: string; lists?: ListDescriptor[]; tags?: string[] };
@@ -30,7 +29,7 @@ export class FeedOrchestrator implements FeedOrchestratorApi {
 
   constructor(
     private nostr: NostrClient,
-    private service: FeedService,
+    private service: FeedServiceApi,
     private transport?: TransportStore,
     private isBlocked?: (pubkey: string) => boolean,
     private onEventAssist?: (event: NostrEvent) => void,
@@ -198,14 +197,14 @@ export class FeedOrchestrator implements FeedOrchestratorApi {
     const run = () => {
       this.profileDrainTimer = undefined;
       if (this.profileInflight.size >= this.maxProfileInflight) {
-        this.profileDrainTimer = window.setTimeout(run, 400);
+        this.profileDrainTimer = globalThis.setTimeout(run, 400);
         return;
       }
       const next = this.profileQueue.values().next().value as string | undefined;
       if (!next) return;
       if (this.profiles[next] || this.profileInflight.has(next)) {
         this.profileQueue.delete(next);
-        this.profileDrainTimer = window.setTimeout(run, 120);
+        this.profileDrainTimer = globalThis.setTimeout(run, 120);
         return;
       }
       this.profileQueue.delete(next);
@@ -220,10 +219,10 @@ export class FeedOrchestrator implements FeedOrchestratorApi {
         .catch(() => null)
         .finally(() => {
           this.profileInflight.delete(next);
-          this.profileDrainTimer = window.setTimeout(run, 200);
+          this.profileDrainTimer = globalThis.setTimeout(run, 200);
         });
     };
-    this.profileDrainTimer = window.setTimeout(run, 120);
+    this.profileDrainTimer = globalThis.setTimeout(run, 120);
   }
 
   private flush(existing: NostrEvent[]): NostrEvent[] {

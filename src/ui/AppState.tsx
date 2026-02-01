@@ -129,6 +129,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     transportStore,
     settings,
     followers,
+    relays: settings.relays,
     isBlocked: isBlockedRef,
     cache: nostrCache,
     onEventAssist: assistEvent,
