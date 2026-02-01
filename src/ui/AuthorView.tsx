@@ -117,6 +117,8 @@ export function AuthorView() {
               profile={profiles[event.pubkey] ?? profile}
               onSelect={selectEvent}
               onOpenThread={() => navigate(`/thread/${event.id}`, { state: { event } })}
+              showActions
+              actionsPosition="top"
             />
           </div>
         )}

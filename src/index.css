@@ -858,6 +858,7 @@ body {
   padding: 24px 16px 12px;
   display: grid;
   gap: 12px;
+  justify-items: center;
 }
 
 .author-back {
@@ -879,6 +880,7 @@ body {
   border: 1px solid #1b222c;
   border-radius: 20px;
   padding: 16px;
+  width: min(720px, 92vw);
 }
 
 .author-avatar {
