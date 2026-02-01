@@ -49,6 +49,7 @@ body {
   height: 100%;
   padding: 80px 16px 24px;
   max-width: 100%;
+  overflow-x: hidden;
 }
 
 .feed-shell {
@@ -116,10 +117,13 @@ body {
   display: flex;
   justify-content: center;
   padding: 12px 0;
+  max-width: 100%;
 }
 
 .post-card {
   width: min(720px, 92vw);
+  max-width: calc(100vw - 32px);
+  box-sizing: border-box;
   background: #11151b;
   border: 1px solid #1b222c;
   border-radius: 24px;
@@ -141,12 +145,15 @@ body {
   justify-content: space-between;
   align-items: center;
   gap: 12px;
+  flex-wrap: wrap;
 }
 
 .post-author {
   display: flex;
   align-items: center;
   gap: 12px;
+  min-width: 0;
+  flex: 1 1 auto;
 }
 
 .author-actions {
@@ -176,6 +183,10 @@ body {
   font-size: 16px;
   font-weight: 600;
   cursor: pointer;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .post-time {
@@ -186,6 +197,8 @@ body {
 .post-icons {
   display: flex;
   gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .icon-button {
@@ -308,6 +321,7 @@ body {
 .post-media-shell {
   position: relative;
   width: 100%;
+  max-width: 100%;
   background: rgba(8, 12, 18, 0.7);
   border-radius: 18px;
   border: 1px solid #1b222c;
