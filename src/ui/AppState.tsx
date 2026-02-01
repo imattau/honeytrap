@@ -69,6 +69,7 @@ interface AppStateValue {
     timeoutMs?: number;
   }) => Promise<{ url: string; source: 'p2p' | 'http' }>;
   seedMediaFile: (file: File) => Promise<{ url: string; magnet: string; sha256: string }>;
+  reseedTorrent: (magnet: string) => void;
   attachMedia: (files: File[], mode: MediaAttachMode, options: { relays: string[]; preferredRelay?: string; onProgress?: (percent: number) => void }) => Promise<MediaAttachResult[]>;
   flushPending: () => void;
   isFollowed: (pubkey: string) => boolean;
@@ -118,7 +119,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     updateSettings
   });
 
-  const { torrentSnapshot, canEncryptNip44, magnetBuilder, loadMedia, seedMediaFile } = useP2PState({
+  const { torrentSnapshot, canEncryptNip44, magnetBuilder, loadMedia, seedMediaFile, reseedTorrent } = useP2PState({
     settings,
     nostr,
     signer,
@@ -357,6 +358,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
         canEncryptNip44,
         loadMedia,
         seedMediaFile,
+        reseedTorrent,
         attachMedia,
         flushPending: feedState.flushPending,
         isFollowed,

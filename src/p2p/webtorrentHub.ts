@@ -41,6 +41,10 @@ export class WebTorrentHub {
     return this.client.add(magnet, onAdd);
   }
 
+  ensure(magnet: string, onAdd: (torrent: Torrent) => void): Torrent {
+    return this.add(magnet, onAdd);
+  }
+
   private createClient(settings: P2PSettings, existing?: WebTorrent) {
     existing?.destroy();
     return new WebTorrent({

@@ -120,6 +120,33 @@ export function useP2PState({
     };
   };
 
+  const reseedTorrent = (magnet: string) => {
+    const client = webtorrentHub.getClient();
+    if (!client) throw new Error('WebTorrent disabled');
+    webtorrentHub.ensure(magnet, (torrent) => {
+      torrentRegistry.start({
+        magnet,
+        mode: 'seed',
+        name: torrent.name
+      });
+      const update = () => {
+        torrentRegistry.update(magnet, {
+          peers: torrent.numPeers ?? 0,
+          progress: torrent.progress ?? 0,
+          downloaded: torrent.downloaded ?? 0,
+          uploaded: torrent.uploaded ?? 0
+        });
+      };
+      torrent.on('download', update);
+      torrent.on('upload', update);
+      torrent.on('wire', update);
+      torrent.on('noPeers', update);
+      torrent.on('done', update);
+      torrent.on('error', () => torrentRegistry.finish(magnet));
+      torrent.on('close', () => torrentRegistry.finish(magnet));
+    });
+  };
+
   return {
     torrentRegistry,
     torrentSnapshot,
@@ -127,6 +154,7 @@ export function useP2PState({
     mediaAssist,
     magnetBuilder,
     loadMedia,
-    seedMediaFile
+    seedMediaFile,
+    reseedTorrent
   };
 }

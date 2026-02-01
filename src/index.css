@@ -944,6 +944,7 @@ body {
   font-size: 11px;
   color: #8b9bb4;
   margin-top: 4px;
+  align-items: center;
 }
 
 .torrent-chip {
@@ -964,6 +965,16 @@ body {
 .torrent-chip.fetch {
   border-color: rgba(125, 211, 252, 0.5);
   color: #7dd3fc;
+}
+
+.torrent-reseed {
+  margin-left: auto;
+  border: 1px solid rgba(109, 214, 255, 0.4);
+  color: #7dd3fc;
+  background: rgba(8, 12, 18, 0.5);
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 10px;
 }
 
 .thread-stack {
@@ -1108,6 +1119,30 @@ body {
   color: #8fdcff;
   display: grid;
   place-items: center;
+  transition: 0.2s ease;
+}
+
+.action-icon.is-active {
+  box-shadow: 0 0 14px rgba(109, 214, 255, 0.35);
+  opacity: 1;
+}
+
+.action-icon.is-like.is-active {
+  color: #f472b6;
+  border-color: rgba(244, 114, 182, 0.6);
+  box-shadow: 0 0 16px rgba(244, 114, 182, 0.4);
+}
+
+.action-icon.is-repost.is-active {
+  color: #86efac;
+  border-color: rgba(134, 239, 172, 0.6);
+  box-shadow: 0 0 16px rgba(134, 239, 172, 0.4);
+}
+
+.action-icon.is-share.is-active {
+  color: #facc15;
+  border-color: rgba(250, 204, 21, 0.6);
+  box-shadow: 0 0 16px rgba(250, 204, 21, 0.4);
 }
 
 .composer-backdrop {

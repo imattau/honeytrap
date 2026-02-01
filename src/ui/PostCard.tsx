@@ -43,6 +43,9 @@ export function PostCard({
   const { profiles, findEventById, selectEvent, selectAuthor, transport, loadMedia, isFollowed, isBlocked, isNsfwAuthor, toggleFollow, toggleBlock, toggleNsfwAuthor } = useAppState();
   const [expanded, setExpanded] = useState(false);
   const [revealed, setRevealed] = useState(false);
+  const [liked, setLiked] = useState(false);
+  const [reposted, setReposted] = useState(false);
+  const [shared, setShared] = useState(false);
   const fallbackAvatar = '/assets/honeytrap_logo_256.png';
   const navigate = useNavigate();
   const media = useMemo(() => extractMedia(event), [event]);
@@ -203,10 +206,13 @@ export function PostCard({
       {showActions && actionsPosition === 'top' && (
         <PostActions
           onReply={onReply}
-          onRepost={() => null}
-          onLike={() => null}
+          onRepost={() => setReposted((prev) => !prev)}
+          onLike={() => setLiked((prev) => !prev)}
           onZap={onZap}
-          onShare={() => null}
+          onShare={() => setShared((prev) => !prev)}
+          reposted={reposted}
+          liked={liked}
+          shared={shared}
         />
       )}
 
@@ -264,10 +270,13 @@ export function PostCard({
       {showActions && actionsPosition === 'bottom' && (
         <PostActions
           onReply={onReply}
-          onRepost={() => null}
-          onLike={() => null}
+          onRepost={() => setReposted((prev) => !prev)}
+          onLike={() => setLiked((prev) => !prev)}
           onZap={onZap}
-          onShare={() => null}
+          onShare={() => setShared((prev) => !prev)}
+          reposted={reposted}
+          liked={liked}
+          shared={shared}
         />
       )}
     </article>

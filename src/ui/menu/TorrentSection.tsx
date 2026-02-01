@@ -12,13 +12,14 @@ interface TorrentSectionProps {
 }
 
 export function TorrentSection({ value, onChange, onSave, saved }: TorrentSectionProps) {
-  const { torrents, canEncryptNip44 } = useAppState();
+  const { torrents, canEncryptNip44, reseedTorrent } = useAppState();
+  const [showAll, setShowAll] = React.useState(false);
   const activeTorrents = useMemo(() => {
     return Object.values(torrents)
-      .filter((item) => item.active)
+      .filter((item) => showAll || item.active)
       .sort((a, b) => b.updatedAt - a.updatedAt)
-      .slice(0, 6);
-  }, [torrents]);
+      .slice(0, showAll ? 40 : 6);
+  }, [torrents, showAll]);
 
   return (
     <MenuSection title="BitTorrent Assist" icon={<Bolt size={16} />}>
@@ -107,7 +108,12 @@ export function TorrentSection({ value, onChange, onSave, saved }: TorrentSectio
       )}
       {activeTorrents.length > 0 && (
         <div className="torrent-list">
-          <div className="menu-label">Active torrents</div>
+          <div className="menu-row">
+            <span className="menu-label">Torrents</span>
+            <button className="menu-pill" onClick={() => setShowAll((prev) => !prev)}>
+              {showAll ? 'Show active' : 'Show all'}
+            </button>
+          </div>
           <div className="torrent-list-items">
             {activeTorrents.map((item) => (
               <div className="torrent-item" key={item.magnet}>
@@ -118,6 +124,11 @@ export function TorrentSection({ value, onChange, onSave, saved }: TorrentSectio
                 <div className="torrent-meta">
                   <span>{Math.round(item.progress * 100)}%</span>
                   <span>{item.peers} peers</span>
+                  {!item.active && (
+                    <button className="torrent-reseed" onClick={() => reseedTorrent(item.magnet)}>
+                      Reseed
+                    </button>
+                  )}
                 </div>
               </div>
             ))}
