@@ -9,9 +9,11 @@ import { TorrentSyncService } from '../../p2p/torrentSync';
 import { TorrentListService } from '../../nostr/torrentList';
 import type { Nip44Cipher } from '../../nostr/nip44';
 import type { AssistSource } from '../../p2p/types';
+import type { NostrEvent } from '../../nostr/types';
 import type { TransportStore } from '../../nostr/transport';
 import { WebTorrentHub } from '../../p2p/webtorrentHub';
 import { P2PSettingsListService } from '../../nostr/p2pSettingsList';
+import { EventAssistService } from '../../p2p/eventAssistService';
 
 export function useP2PState({
   settings,
@@ -39,6 +41,10 @@ export function useP2PState({
     () => new TorrentListService(nostr, signer, nip44Cipher),
     [nostr, signer, nip44Cipher]
   );
+  const eventAssist = useMemo(
+    () => new EventAssistService(settings.p2p, torrentRegistry, webtorrentHub),
+    [settings.p2p, torrentRegistry, webtorrentHub]
+  );
   const settingsListService = useMemo(
     () => new P2PSettingsListService(nostr, signer, nip44Cipher),
     [nostr, signer, nip44Cipher]
@@ -52,6 +58,10 @@ export function useP2PState({
   useEffect(() => {
     magnetBuilder.updateSettings(settings.p2p);
   }, [magnetBuilder, settings.p2p]);
+
+  useEffect(() => {
+    eventAssist.updateSettings(settings.p2p);
+  }, [eventAssist, settings.p2p]);
 
   useEffect(() => {
     webtorrentHub.updateSettings(settings.p2p);
@@ -152,6 +162,15 @@ export function useP2PState({
     });
   };
 
+  const assistEvent = async (event: NostrEvent, authorPubkey: string) => {
+    const isSelf = Boolean(keysNpub && authorPubkey === keysNpub);
+    const allowP2P = isSelf || settings.p2p.scope === 'everyone' || settings.follows.includes(authorPubkey);
+    const assisted = await eventAssist.maybeAssist(event, allowP2P);
+    if (assisted) {
+      transportStore.mark(event.id, { p2p: true });
+    }
+  };
+
   return {
     torrentRegistry,
     torrentSnapshot,
@@ -161,6 +180,7 @@ export function useP2PState({
     loadMedia,
     seedMediaFile,
     reseedTorrent,
+    assistEvent,
     loadP2PSettings: (pubkey: string) => settingsListService.load(pubkey),
     publishP2PSettings: (next: AppSettings['p2p'], updatedAt?: number) => settingsListService.publish(next, updatedAt)
   };

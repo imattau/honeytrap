@@ -106,15 +106,6 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     updateSettings
   });
 
-  const feedState = useFeedState({
-    nostr,
-    transportStore,
-    settings,
-    followers,
-    isBlocked: isBlockedRef,
-    cache: nostrCache
-  });
-
   const { relayList, mediaRelayList, relayStatus, refreshRelayStatus } = useRelayState({
     nostr,
     keysNpub: keys?.npub,
@@ -122,13 +113,23 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     updateSettings
   });
 
-  const { torrentSnapshot, canEncryptNip44, magnetBuilder, loadMedia, seedMediaFile, reseedTorrent, loadP2PSettings, publishP2PSettings } = useP2PState({
+  const { torrentSnapshot, canEncryptNip44, magnetBuilder, loadMedia, seedMediaFile, reseedTorrent, assistEvent, loadP2PSettings, publishP2PSettings } = useP2PState({
     settings,
     nostr,
     signer,
     nip44Cipher,
     keysNpub: keys?.npub,
     transportStore
+  });
+
+  const feedState = useFeedState({
+    nostr,
+    transportStore,
+    settings,
+    followers,
+    isBlocked: isBlockedRef,
+    cache: nostrCache,
+    onEventAssist: assistEvent
   });
 
   const [selfProfile, setSelfProfile] = useState<ProfileMetadata | undefined>(undefined);

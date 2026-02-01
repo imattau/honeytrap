@@ -31,6 +31,7 @@ export class FeedOrchestrator implements FeedOrchestratorApi {
     private service: FeedService,
     private transport?: TransportStore,
     private isBlocked?: (pubkey: string) => boolean,
+    private onEventAssist?: (event: NostrEvent) => void,
     cache?: NostrCache
   ) {
     this.cache = cache;
@@ -106,6 +107,7 @@ export class FeedOrchestrator implements FeedOrchestratorApi {
         if (this.knownIds.has(event.id)) return;
         this.knownIds.add(event.id);
         this.transport?.mark(event.id, { relay: true, verified: verifyEvent(event as any) });
+        this.onEventAssist?.(event);
         this.pending.push(event);
         onPending?.(this.pending.length);
         if (this.pending.length > MAX_BUFFER) {

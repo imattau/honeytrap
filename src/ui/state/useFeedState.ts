@@ -14,7 +14,8 @@ export function useFeedState({
   settings,
   followers,
   isBlocked,
-  cache
+  cache,
+  onEventAssist
 }: {
   nostr: NostrClient;
   transportStore: TransportStore;
@@ -22,6 +23,7 @@ export function useFeedState({
   followers: string[];
   isBlocked: (pubkey: string) => boolean;
   cache?: NostrCache;
+  onEventAssist?: (event: NostrEvent) => void;
 }) {
   const [events, setEvents] = useState<NostrEvent[]>([]);
   const [profiles, setProfiles] = useState<Record<string, ProfileMetadata>>({});
@@ -33,8 +35,8 @@ export function useFeedState({
 
   const feedService = useMemo(() => new FeedService(nostr), [nostr]);
   const orchestrator = useMemo(
-    () => new FeedOrchestrator(nostr, feedService, transportStore, isBlocked, cache),
-    [nostr, feedService, transportStore, isBlocked, cache]
+    () => new FeedOrchestrator(nostr, feedService, transportStore, isBlocked, onEventAssist, cache),
+    [nostr, feedService, transportStore, isBlocked, onEventAssist, cache]
   );
 
   const eventsRef = useRef<NostrEvent[]>([]);
