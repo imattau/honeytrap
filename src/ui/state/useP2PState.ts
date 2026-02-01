@@ -11,6 +11,7 @@ import type { Nip44Cipher } from '../../nostr/nip44';
 import type { AssistSource } from '../../p2p/types';
 import type { TransportStore } from '../../nostr/transport';
 import { WebTorrentHub } from '../../p2p/webtorrentHub';
+import { P2PSettingsListService } from '../../nostr/p2pSettingsList';
 
 export function useP2PState({
   settings,
@@ -36,6 +37,10 @@ export function useP2PState({
   const magnetBuilder = useMemo(() => new MagnetBuilder(settings.p2p, torrentRegistry, webtorrentHub), [settings.p2p, torrentRegistry, webtorrentHub]);
   const torrentListService = useMemo(
     () => new TorrentListService(nostr, signer, nip44Cipher),
+    [nostr, signer, nip44Cipher]
+  );
+  const settingsListService = useMemo(
+    () => new P2PSettingsListService(nostr, signer, nip44Cipher),
     [nostr, signer, nip44Cipher]
   );
   const torrentSync = useMemo(() => new TorrentSyncService(torrentListService), [torrentListService]);
@@ -155,6 +160,8 @@ export function useP2PState({
     magnetBuilder,
     loadMedia,
     seedMediaFile,
-    reseedTorrent
+    reseedTorrent,
+    loadP2PSettings: (pubkey: string) => settingsListService.load(pubkey),
+    publishP2PSettings: (next: AppSettings['p2p'], updatedAt?: number) => settingsListService.publish(next, updatedAt)
   };
 }

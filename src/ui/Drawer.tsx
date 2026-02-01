@@ -27,6 +27,7 @@ export function Drawer() {
     relayStatus,
     refreshRelayStatus,
     saveMediaRelays,
+    saveP2PSettings,
     saveKeyRecord,
     clearKeys,
     connectNip07,
@@ -186,7 +187,11 @@ export function Drawer() {
   };
 
   const handleSaveTorrent = () => {
-    setSettings(menuState.applyTorrent(settings));
+    const next = menuState.applyTorrent(settings);
+    const updatedAt = Date.now();
+    const withStamp = { ...next, p2pUpdatedAt: updatedAt };
+    setSettings(withStamp);
+    saveP2PSettings(withStamp.p2p, updatedAt).catch(() => null);
     setSavedSection('torrent');
   };
 

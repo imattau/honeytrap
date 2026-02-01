@@ -32,5 +32,6 @@ export const defaultSettings: AppSettings = {
       'wss://tracker.openwebtorrent.com',
       'wss://tracker.btorrent.xyz'
     ]
-  }
+  },
+  p2pUpdatedAt: 0
 };

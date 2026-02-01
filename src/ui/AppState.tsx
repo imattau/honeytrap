@@ -84,6 +84,7 @@ interface AppStateValue {
   authorService: AuthorService;
   hashtagService: HashtagService;
   findEventById: (id: string) => NostrEvent | undefined;
+  saveP2PSettings: (settings: AppSettings['p2p'], updatedAt: number) => Promise<void>;
 }
 
 const AppState = createContext<AppStateValue | undefined>(undefined);
@@ -94,6 +95,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   const { keys, signer, nip44Cipher, loadKeysFromStorage, saveKeyRecord, clearKeys, connectNip07, connectRemoteSigner, disconnectRemoteSigner } = useAuthState();
   const { transportStore, transport } = useTransportState();
   const { settings, updateSettings } = useSettingsState(defaultSettings);
+  const settingsRef = useRef(settings);
   const blockedRef = useRef<string[]>([]);
   const isBlockedRef = useCallback((pubkey: string) => blockedRef.current.includes(pubkey), []);
 
@@ -120,7 +122,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     updateSettings
   });
 
-  const { torrentSnapshot, canEncryptNip44, magnetBuilder, loadMedia, seedMediaFile, reseedTorrent } = useP2PState({
+  const { torrentSnapshot, canEncryptNip44, magnetBuilder, loadMedia, seedMediaFile, reseedTorrent, loadP2PSettings, publishP2PSettings } = useP2PState({
     settings,
     nostr,
     signer,
@@ -162,8 +164,28 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   }, [settings.blocked]);
 
   useEffect(() => {
+    settingsRef.current = settings;
+  }, [settings]);
+
+  useEffect(() => {
     nostrCache.purgeExpired().catch(() => null);
   }, [nostrCache]);
+
+  useEffect(() => {
+    if (!keys?.npub) return;
+    let active = true;
+    loadP2PSettings(keys.npub)
+      .then((remote) => {
+        if (!active || !remote) return;
+        const currentUpdatedAt = settingsRef.current.p2pUpdatedAt ?? 0;
+        if ((remote.updatedAt ?? 0) <= currentUpdatedAt) return;
+        updateSettings({ ...settingsRef.current, p2p: remote.settings, p2pUpdatedAt: remote.updatedAt });
+      })
+      .catch(() => null);
+    return () => {
+      active = false;
+    };
+  }, [keys, loadP2PSettings, updateSettings]);
 
   useEffect(() => {
     if (!keys?.npub) {
@@ -304,6 +326,11 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     });
   }, [publishWithAssist]);
 
+  const saveP2PSettings = useCallback(async (next: AppSettings['p2p'], updatedAt: number) => {
+    if (!keys?.npub) return;
+    await publishP2PSettings(next, updatedAt);
+  }, [keys, publishP2PSettings]);
+
   const sendZap = useCallback(async ({ event, profile, amountSats, comment }: {
     event: NostrEvent;
     profile?: ProfileMetadata;
@@ -373,7 +400,8 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
         uploadMedia,
         authorService,
         hashtagService,
-        findEventById
+        findEventById,
+        saveP2PSettings
       }}
     >
       {children}
