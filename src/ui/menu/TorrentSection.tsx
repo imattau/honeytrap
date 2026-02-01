@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Bolt, Globe2, Save } from 'lucide-react';
 import type { P2PSettings } from '../../storage/types';
 import { MenuSection } from './MenuSection';
+import { useAppState } from '../AppState';
 
 interface TorrentSectionProps {
   value: P2PSettings;
@@ -11,6 +12,14 @@ interface TorrentSectionProps {
 }
 
 export function TorrentSection({ value, onChange, onSave, saved }: TorrentSectionProps) {
+  const { torrents, canEncryptNip44 } = useAppState();
+  const activeTorrents = useMemo(() => {
+    return Object.values(torrents)
+      .filter((item) => item.active)
+      .sort((a, b) => b.updatedAt - a.updatedAt)
+      .slice(0, 6);
+  }, [torrents]);
+
   return (
     <MenuSection title="BitTorrent Assist" icon={<Bolt size={16} />}>
       <div className="menu-toggle-row">
@@ -91,6 +100,30 @@ export function TorrentSection({ value, onChange, onSave, saved }: TorrentSectio
           onChange={(event) => onChange({ trackers: event.target.value.split(/\n|,/).map((t) => t.trim()).filter(Boolean) })}
         />
       </div>
+      {!canEncryptNip44 && (
+        <div className="menu-sub">
+          Encrypted torrent list is best-effort. Remote signer support is planned.
+        </div>
+      )}
+      {activeTorrents.length > 0 && (
+        <div className="torrent-list">
+          <div className="menu-label">Active torrents</div>
+          <div className="torrent-list-items">
+            {activeTorrents.map((item) => (
+              <div className="torrent-item" key={item.magnet}>
+                <div className="torrent-item-row">
+                  <span className={`torrent-chip ${item.mode}`}>{item.mode}</span>
+                  <span className="torrent-name">{item.name ?? item.url ?? 'torrent'}</span>
+                </div>
+                <div className="torrent-meta">
+                  <span>{Math.round(item.progress * 100)}%</span>
+                  <span>{item.peers} peers</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
       <button className={`menu-button ${saved ? 'menu-button--saved' : ''}`} onClick={onSave}>
         <Save size={14} /> Save BitTorrent
       </button>

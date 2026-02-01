@@ -19,7 +19,7 @@ export class FeedOrchestrator implements FeedOrchestratorApi {
   private profileDrainTimer?: number;
   private maxProfileInflight = 2;
   private hydrated = false;
-  private lastContext?: { follows: string[]; listId?: string; lists?: ListDescriptor[] };
+  private lastContext?: { follows: string[]; followers: string[]; feedMode: 'all' | 'follows' | 'followers' | 'both'; listId?: string; lists?: ListDescriptor[] };
   private lastGetEvents?: () => NostrEvent[];
   private lastOnUpdate?: (events: NostrEvent[]) => void;
   private lastOnProfiles?: (profiles: Record<string, ProfileMetadata>) => void;

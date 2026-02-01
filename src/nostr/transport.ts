@@ -22,7 +22,9 @@ export class TransportStore implements TransportStoreApi {
   subscribe(listener: TransportListener) {
     this.listeners.add(listener);
     listener(this.snapshot());
-    return () => this.listeners.delete(listener);
+    return () => {
+      this.listeners.delete(listener);
+    };
   }
 
   snapshot(): Record<string, TransportStatus> {

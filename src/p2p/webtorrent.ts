@@ -86,11 +86,18 @@ export class WebTorrentAssist {
   private addTorrent(magnet: string, timeoutMs: number, source: AssistSource): Promise<Torrent | undefined> {
     if (!this.client) return Promise.resolve(undefined);
     return new Promise((resolve) => {
+      let timedOut = false;
       const timer = setTimeout(() => {
+        timedOut = true;
+        this.registry?.finish(magnet);
         resolve(undefined);
       }, timeoutMs);
 
       this.client!.add(magnet, (torrent: Torrent) => {
+        if (timedOut) {
+          torrent.destroy();
+          return;
+        }
         this.registry?.start({
           magnet,
           mode: 'fetch',

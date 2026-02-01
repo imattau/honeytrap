@@ -59,7 +59,8 @@ export class MagnetBuilder {
   private async seedBytes(name: string, data: ArrayBuffer | Uint8Array): Promise<string | undefined> {
     if (!this.client) return undefined;
     try {
-      const file = new File([data], name, { type: 'application/octet-stream' });
+      const bytes = data instanceof Uint8Array ? data : new Uint8Array(data);
+      const file = new File([bytes as BlobPart], name, { type: 'application/octet-stream' });
       const torrent = await new Promise<Torrent>((resolve, reject) => {
         this.client!.seed(file, (seeded) => resolve(seeded)).on('error', reject);
       });

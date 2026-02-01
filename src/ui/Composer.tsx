@@ -11,7 +11,7 @@ interface ComposerProps {
   open: boolean;
   replyTo?: NostrEvent;
   onClose: () => void;
-  onSubmit: (input: ComposerInput) => Promise<void>;
+  onSubmit: (input: ComposerInput) => Promise<void | NostrEvent>;
   mediaRelays?: string[];
   onUpload?: (file: File, relay: string, onProgress?: (percent: number) => void) => Promise<{ url: string; sha256?: string }>;
 }

@@ -6,6 +6,13 @@ export type Nip44Mode = 'self' | 'nip07' | 'nip46';
 export class Nip44Cipher {
   constructor(private getKeys: () => { nsec?: string } | undefined) {}
 
+  canEncrypt(): boolean {
+    const keys = this.getKeys();
+    if (keys?.nsec) return true;
+    const nostrProvider = (window as any).nostr;
+    return Boolean(nostrProvider?.nip44?.encrypt && nostrProvider?.getPublicKey);
+  }
+
   async encryptSelf(payload: string): Promise<{ mode: Nip44Mode; content: string } | undefined> {
     const keys = this.getKeys();
     if (keys?.nsec) {

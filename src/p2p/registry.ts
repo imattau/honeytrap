@@ -23,10 +23,14 @@ export class TorrentRegistry {
   private items = new Map<string, TorrentStatus>();
   private listeners = new Set<TorrentListener>();
 
+  constructor(private maxAgeMs = 6 * 60 * 60 * 1000) {}
+
   subscribe(listener: TorrentListener) {
     this.listeners.add(listener);
     listener(this.snapshot());
-    return () => this.listeners.delete(listener);
+    return () => {
+      this.listeners.delete(listener);
+    };
   }
 
   start(input: {
@@ -83,6 +87,20 @@ export class TorrentRegistry {
 
   snapshot(): TorrentSnapshot {
     return Object.fromEntries(this.items.entries());
+  }
+
+  prune() {
+    const now = Date.now();
+    let changed = false;
+    this.items.forEach((value, key) => {
+      const inactiveStale = !value.active && now - value.updatedAt > this.maxAgeMs;
+      const longLived = now - value.addedAt > this.maxAgeMs * 2;
+      if (inactiveStale || longLived) {
+        this.items.delete(key);
+        changed = true;
+      }
+    });
+    if (changed) this.emit();
   }
 
   private emit() {
