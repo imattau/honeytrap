@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import type { NostrEvent } from '../src/nostr/types';
 import { FeedOrchestrator } from '../src/nostr/feed';
 
@@ -41,5 +41,27 @@ describe('FeedOrchestrator filtering', () => {
     service.onEvent?.(makeEvent('1', 'bob'));
 
     expect(updates.length).toBe(0);
+  });
+
+  it('invokes event assist for accepted events', () => {
+    (globalThis as any).window = {
+      setTimeout: (fn: () => void, ms?: number) => setTimeout(fn, ms)
+    };
+    const service = new FakeService();
+    const client = new FakeClient();
+    const assist = vi.fn();
+    const orchestrator = new FeedOrchestrator(client as any, service as any, undefined, undefined, assist);
+    const updates: NostrEvent[][] = [];
+
+    orchestrator.subscribe(
+      { follows: ['alice'], followers: [], feedMode: 'follows' },
+      () => [],
+      (next) => updates.push(next),
+      () => null
+    );
+
+    service.onEvent?.(makeEvent('1', 'alice'));
+
+    expect(assist).toHaveBeenCalledTimes(1);
   });
 });

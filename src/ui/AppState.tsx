@@ -222,12 +222,12 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
 
   const toggleFollow = useCallback((pubkey: string) => {
     const graph = new SocialGraph(settings);
-    updateSettings(graph.toggleFollow(pubkey));
+    updateSettings({ ...graph.toggleFollow(pubkey), followsUpdatedAt: Date.now() });
   }, [settings, updateSettings]);
 
   const toggleBlock = useCallback((pubkey: string) => {
     const graph = new SocialGraph(settings);
-    updateSettings(graph.toggleBlock(pubkey));
+    updateSettings({ ...graph.toggleBlock(pubkey), followsUpdatedAt: Date.now() });
   }, [settings, updateSettings]);
 
   const toggleNsfwAuthor = useCallback((pubkey: string) => {

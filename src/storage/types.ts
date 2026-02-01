@@ -21,6 +21,7 @@ export interface AppSettings {
   relays: string[];
   p2p: P2PSettings;
   p2pUpdatedAt?: number;
+  followsUpdatedAt?: number;
   selectedListId?: string;
   follows: string[];
   blocked: string[];

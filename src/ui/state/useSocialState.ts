@@ -51,7 +51,10 @@ export function useSocialState({
       .then((list) => {
         if (!active) return;
         if (list.length === 0) return;
-        if (sameSet(list, settings.follows)) return;
+        if (sameSet(list, settingsRef.current.follows)) return;
+        const lastLocalUpdate = settingsRef.current.followsUpdatedAt ?? 0;
+        const allowOverride = settingsRef.current.follows.length === 0 || Date.now() - lastLocalUpdate > 5 * 60_000;
+        if (!allowOverride) return;
         updateSettings({ ...settingsRef.current, follows: list });
       })
       .catch(() => null);

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { AppSettings } from '../../storage/types';
 import type { NostrClient } from '../../nostr/client';
 import type { EventSigner } from '../../nostr/signer';
@@ -32,6 +32,8 @@ export function useP2PState({
 }) {
   const [torrentSnapshot, setTorrentSnapshot] = useState<TorrentSnapshot>({});
   const [canEncryptNip44, setCanEncryptNip44] = useState(false);
+  const settingsRef = useRef(settings);
+  const keysRef = useRef(keysNpub);
 
   const torrentRegistry = useMemo(() => new TorrentRegistry(), []);
   const webtorrentHub = useMemo(() => new WebTorrentHub(settings.p2p), []);
@@ -66,6 +68,14 @@ export function useP2PState({
   useEffect(() => {
     webtorrentHub.updateSettings(settings.p2p);
   }, [webtorrentHub, settings.p2p]);
+
+  useEffect(() => {
+    settingsRef.current = settings;
+  }, [settings]);
+
+  useEffect(() => {
+    keysRef.current = keysNpub;
+  }, [keysNpub]);
 
   useEffect(() => {
     const unsubscribe = torrentRegistry.subscribe(setTorrentSnapshot);
@@ -162,14 +172,17 @@ export function useP2PState({
     });
   };
 
-  const assistEvent = async (event: NostrEvent, authorPubkey: string) => {
-    const isSelf = Boolean(keysNpub && authorPubkey === keysNpub);
-    const allowP2P = isSelf || settings.p2p.scope === 'everyone' || settings.follows.includes(authorPubkey);
+  const assistEvent = useCallback(async (event: NostrEvent) => {
+    const authorPubkey = event.pubkey;
+    const currentKeys = keysRef.current;
+    const currentSettings = settingsRef.current;
+    const isSelf = Boolean(currentKeys && authorPubkey === currentKeys);
+    const allowP2P = isSelf || currentSettings.p2p.scope === 'everyone' || currentSettings.follows.includes(authorPubkey);
     const assisted = await eventAssist.maybeAssist(event, allowP2P);
     if (assisted) {
       transportStore.mark(event.id, { p2p: true });
     }
-  };
+  }, [eventAssist, transportStore]);
 
   return {
     torrentRegistry,

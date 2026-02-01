@@ -7,6 +7,7 @@ export const defaultSettings: AppSettings = {
     'wss://relay.snort.social'
   ],
   follows: [],
+  followsUpdatedAt: 0,
   blocked: [],
   nsfwAuthors: [],
   feedMode: 'all',
