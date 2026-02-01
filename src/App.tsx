@@ -6,6 +6,7 @@ import { Drawer } from './ui/Drawer';
 import { PostCard } from './ui/PostCard';
 import { ThreadStack } from './ui/ThreadStack';
 import { AuthorView } from './ui/AuthorView';
+import { HashtagView } from './ui/HashtagView';
 import { FabButton } from './ui/FabButton';
 import { Composer } from './ui/Composer';
 
@@ -23,7 +24,7 @@ function Feed() {
     publishPost,
     mediaRelayList,
     settings,
-    uploadMedia
+    attachMedia
   } = useAppState();
   const [composerOpen, setComposerOpen] = useState(false);
   const navigate = useNavigate();
@@ -110,7 +111,7 @@ function Feed() {
         onClose={() => setComposerOpen(false)}
         onSubmit={(input) => publishPost(input)}
         mediaRelays={mediaRelayList.length > 0 ? mediaRelayList : settings.mediaRelays}
-        onUpload={uploadMedia}
+        onAttachMedia={attachMedia}
       />
     </div>
   );
@@ -122,6 +123,7 @@ function AppRoutes() {
       <Route path="/" element={<Feed />} />
       <Route path="/thread/:id" element={<ThreadStack />} />
       <Route path="/author/:pubkey" element={<AuthorView />} />
+      <Route path="/tag/:tag" element={<HashtagView />} />
     </Routes>
   );
 }

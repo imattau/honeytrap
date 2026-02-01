@@ -22,7 +22,7 @@ export function ThreadStack() {
     settings,
     findEventById,
     mediaRelayList,
-    uploadMedia
+    attachMedia
   } = useAppState();
   const [nodes, setNodes] = useState<ThreadNode[]>([]);
   const [loading, setLoading] = useState(true);
@@ -122,7 +122,7 @@ export function ThreadStack() {
         onClose={() => setComposerOpen(false)}
         onSubmit={(input) => replyTarget ? publishReply(input, replyTarget) : Promise.resolve()}
         mediaRelays={mediaRelayList.length > 0 ? mediaRelayList : settings.mediaRelays}
-        onUpload={uploadMedia}
+        onAttachMedia={attachMedia}
       />
       <ZapComposer
         open={zapOpen}

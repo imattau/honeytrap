@@ -419,6 +419,19 @@ body {
   font-size: 12px;
 }
 
+.hashtag-link {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid rgba(109, 214, 255, 0.35);
+  border-radius: 999px;
+  padding: 2px 8px;
+  margin: 0 3px;
+  background: rgba(8, 12, 18, 0.65);
+  color: #7dd3fc;
+  font-size: 12px;
+  cursor: pointer;
+}
+
 .nested-card {
   border: 1px solid #1b222c;
   border-radius: 16px;
@@ -1029,6 +1042,9 @@ body {
 
 .author-avatar.fallback {
   border: 1px solid #1b222c;
+  display: grid;
+  place-items: center;
+  color: #7dd3fc;
 }
 
 .author-name {

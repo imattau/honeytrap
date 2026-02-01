@@ -56,6 +56,15 @@ export class MagnetBuilder {
     return { magnet, sha256 };
   }
 
+  async buildMediaPackageFromBytes(name: string, data: ArrayBuffer): Promise<MagnetResult> {
+    if (!this.client || !this.settings.enabled) return {};
+    const sizeMb = data.byteLength / 1024 / 1024;
+    if (sizeMb > this.settings.maxFileSizeMb) return {};
+    const sha256 = await sha256Hex(data);
+    const magnet = await this.seedBytes(name, data);
+    return { magnet, sha256 };
+  }
+
   private async seedBytes(name: string, data: ArrayBuffer | Uint8Array): Promise<string | undefined> {
     if (!this.client) return undefined;
     try {

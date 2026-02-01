@@ -14,6 +14,8 @@ import { MediaRelayListService } from '../nostr/lists';
 import { MediaUploadService } from '../nostr/mediaUpload';
 import { SocialGraph } from '../nostr/social';
 import type { TorrentSnapshot } from '../p2p/registry';
+import { HashtagService } from '../nostr/hashtag';
+import { MediaAttachService, type MediaAttachMode, type MediaAttachResult } from '../p2p/mediaAttach';
 import { useAuthState } from './state/useAuthState';
 import { useSettingsState } from './state/useSettingsState';
 import { useTransportState } from './state/useTransportState';
@@ -66,6 +68,8 @@ interface AppStateValue {
     authorPubkey: string;
     timeoutMs?: number;
   }) => Promise<{ url: string; source: 'p2p' | 'http' }>;
+  seedMediaFile: (file: File) => Promise<{ url: string; magnet: string; sha256: string }>;
+  attachMedia: (files: File[], mode: MediaAttachMode, options: { relays: string[]; preferredRelay?: string; onProgress?: (percent: number) => void }) => Promise<MediaAttachResult[]>;
   flushPending: () => void;
   isFollowed: (pubkey: string) => boolean;
   isBlocked: (pubkey: string) => boolean;
@@ -75,8 +79,9 @@ interface AppStateValue {
   toggleNsfwAuthor: (pubkey: string) => void;
   setFeedMode: (mode: AppSettings['feedMode']) => void;
   saveMediaRelays: (urls: string[]) => Promise<void>;
-  uploadMedia: (file: File, relay: string, onProgress?: (percent: number) => void) => Promise<{ url: string; sha256?: string }>;
+  uploadMedia: (file: File, relays: string[], onProgress?: (percent: number) => void, preferredRelay?: string) => Promise<{ url: string; sha256?: string }>;
   authorService: AuthorService;
+  hashtagService: HashtagService;
   findEventById: (id: string) => NostrEvent | undefined;
 }
 
@@ -113,7 +118,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     updateSettings
   });
 
-  const { torrentSnapshot, canEncryptNip44, magnetBuilder, loadMedia } = useP2PState({
+  const { torrentSnapshot, canEncryptNip44, magnetBuilder, loadMedia, seedMediaFile } = useP2PState({
     settings,
     nostr,
     signer,
@@ -126,6 +131,10 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
 
   const authorService = useMemo(
     () => new AuthorService(nostr, transportStore, isBlockedRef),
+    [nostr, transportStore, isBlockedRef]
+  );
+  const hashtagService = useMemo(
+    () => new HashtagService(nostr, transportStore, isBlockedRef),
     [nostr, transportStore, isBlockedRef]
   );
   const threadService = useMemo(
@@ -260,10 +269,19 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     }
   }, [mediaRelayService, keys?.npub, settings, updateSettings]);
 
-  const uploadMedia = useCallback(async (file: File, relay: string, onProgress?: (percent: number) => void) => {
+  const uploadMedia = useCallback(async (file: File, relays: string[], onProgress?: (percent: number) => void, preferredRelay?: string) => {
     if (!keys?.npub) throw new Error('Sign in to upload media');
-    return mediaUploadService.upload(file, relay, onProgress);
+    return mediaUploadService.uploadWithFallback(file, relays, onProgress, preferredRelay);
   }, [mediaUploadService, keys?.npub]);
+
+  const mediaAttachService = useMemo(
+    () => new MediaAttachService(uploadMedia, seedMediaFile),
+    [uploadMedia, seedMediaFile]
+  );
+
+  const attachMedia = useCallback(async (files: File[], mode: MediaAttachMode, options: { relays: string[]; preferredRelay?: string; onProgress?: (percent: number) => void }) => {
+    return mediaAttachService.attach(files, mode, options);
+  }, [mediaAttachService]);
 
   const loadThread = useCallback(async (eventId: string) => {
     return threadService.loadThread(eventId);
@@ -338,6 +356,8 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
         torrents: torrentSnapshot,
         canEncryptNip44,
         loadMedia,
+        seedMediaFile,
+        attachMedia,
         flushPending: feedState.flushPending,
         isFollowed,
         isBlocked,
@@ -349,6 +369,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
         saveMediaRelays,
         uploadMedia,
         authorService,
+        hashtagService,
         findEventById
       }}
     >

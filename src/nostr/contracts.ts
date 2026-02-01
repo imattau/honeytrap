@@ -13,7 +13,7 @@ export interface NostrClientApi {
   fetchReplies(eventId: string): Promise<NostrEvent[]>;
   fetchEventById(id: string): Promise<NostrEvent | undefined>;
   publishEvent(event: NostrEvent): Promise<void>;
-  fetchOlderTimeline(input: { until: number; authors?: string[]; limit?: number }): Promise<NostrEvent[]>;
+  fetchOlderTimeline(input: { until: number; authors?: string[]; tags?: string[]; limit?: number }): Promise<NostrEvent[]>;
   publishList(input: {
     title: string;
     description?: string;
@@ -50,14 +50,14 @@ export interface NostrCacheApi {
 }
 
 export interface FeedServiceApi {
-  subscribeTimeline(input: { authors?: string[]; onEvent: (event: NostrEvent) => void }): void;
+  subscribeTimeline(input: { authors?: string[]; tags?: string[]; onEvent: (event: NostrEvent) => void }): void;
   stop(): void;
 }
 
 export interface FeedOrchestratorApi {
   setPaused(value: boolean): void;
   subscribe(
-    ctx: { follows: string[]; followers: string[]; feedMode: AppSettings['feedMode']; listId?: string; lists?: ListDescriptor[] },
+    ctx: { follows: string[]; followers: string[]; feedMode: AppSettings['feedMode']; listId?: string; lists?: ListDescriptor[]; tags?: string[] },
     getEvents: () => NostrEvent[],
     onUpdate: (events: NostrEvent[]) => void,
     onProfiles: (profiles: Record<string, ProfileMetadata>) => void,
@@ -65,7 +65,7 @@ export interface FeedOrchestratorApi {
   ): void;
   stop(): void;
   loadOlder(
-    ctx: { follows: string[]; followers: string[]; feedMode: AppSettings['feedMode']; listId?: string; lists?: ListDescriptor[] },
+    ctx: { follows: string[]; followers: string[]; feedMode: AppSettings['feedMode']; listId?: string; lists?: ListDescriptor[]; tags?: string[] },
     getEvents: () => NostrEvent[],
     onUpdate: (events: NostrEvent[]) => void
   ): Promise<void>;

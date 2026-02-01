@@ -61,7 +61,9 @@ export function PostCard({
     const parts = splitNostrContent(cleaned);
     return parts.map((part, index) => {
       if (part.type === 'text') {
-        return <React.Fragment key={`t-${index}`}>{renderTextWithBreaks(part.value)}</React.Fragment>;
+        return <React.Fragment key={`t-${index}`}>{renderTextWithBreaks(part.value, (tag) => {
+          navigate(`/tag/${encodeURIComponent(tag)}`);
+        })}</React.Fragment>;
       }
       const decoded = decodeNostrUri(part.value);
       if (!decoded) return <span key={`u-${index}`}>{part.value}</span>;
@@ -290,13 +292,46 @@ function splitNostrContent(content: string) {
   return parts;
 }
 
-function renderTextWithBreaks(text: string) {
+function renderTextWithBreaks(text: string, onTagClick: (tag: string) => void) {
   return text.split('\n').map((line, idx, arr) => (
     <React.Fragment key={`l-${idx}`}>
-      {line}
+      {renderLineWithHashtags(line, onTagClick)}
       {idx < arr.length - 1 && <br />}
     </React.Fragment>
   ));
+}
+
+function renderLineWithHashtags(line: string, onTagClick: (tag: string) => void) {
+  const regex = /(^|\\s)#([a-zA-Z0-9_]+)/g;
+  const parts: React.ReactNode[] = [];
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+  while ((match = regex.exec(line)) !== null) {
+    const prefix = match[1] ?? '';
+    const start = match.index;
+    const textEnd = start + prefix.length;
+    if (textEnd > lastIndex) {
+      parts.push(line.slice(lastIndex, textEnd));
+    }
+    const tag = match[2];
+    parts.push(
+      <button
+        key={`tag-${start}`}
+        className="hashtag-link"
+        onClick={(event) => {
+          event.stopPropagation();
+          onTagClick(tag.toLowerCase());
+        }}
+      >
+        #{tag}
+      </button>
+    );
+    lastIndex = start + prefix.length + 1 + tag.length;
+  }
+  if (lastIndex < line.length) {
+    parts.push(line.slice(lastIndex));
+  }
+  return parts;
 }
 
 function stripMediaUrls(content: string, mediaUrls: string[]) {

@@ -19,7 +19,7 @@ export class FeedOrchestrator implements FeedOrchestratorApi {
   private profileDrainTimer?: number;
   private maxProfileInflight = 2;
   private hydrated = false;
-  private lastContext?: { follows: string[]; followers: string[]; feedMode: 'all' | 'follows' | 'followers' | 'both'; listId?: string; lists?: ListDescriptor[] };
+  private lastContext?: { follows: string[]; followers: string[]; feedMode: 'all' | 'follows' | 'followers' | 'both'; listId?: string; lists?: ListDescriptor[]; tags?: string[] };
   private lastGetEvents?: () => NostrEvent[];
   private lastOnUpdate?: (events: NostrEvent[]) => void;
   private lastOnProfiles?: (profiles: Record<string, ProfileMetadata>) => void;
@@ -52,8 +52,9 @@ export class FeedOrchestrator implements FeedOrchestratorApi {
       followers,
       feedMode,
       listId,
-      lists
-    }: { follows: string[]; followers: string[]; feedMode: 'all' | 'follows' | 'followers' | 'both'; listId?: string; lists?: ListDescriptor[] },
+      lists,
+      tags
+    }: { follows: string[]; followers: string[]; feedMode: 'all' | 'follows' | 'followers' | 'both'; listId?: string; lists?: ListDescriptor[]; tags?: string[] },
     getEvents: () => NostrEvent[],
     onUpdate: (events: NostrEvent[]) => void,
     onProfiles: (profiles: Record<string, ProfileMetadata>) => void,
@@ -61,12 +62,13 @@ export class FeedOrchestrator implements FeedOrchestratorApi {
   ) {
     this.hydrated = false;
     this.pending = [];
-    this.lastContext = { follows, followers, feedMode, listId, lists };
+    this.lastContext = { follows, followers, feedMode, listId, lists, tags };
     this.lastGetEvents = getEvents;
     this.lastOnUpdate = onUpdate;
     this.lastOnProfiles = onProfiles;
     this.service.subscribeTimeline({
       authors: resolveAuthors({ follows, followers, feedMode, listId, lists }),
+      tags,
       onEvent: (event) => {
         if (this.isBlocked?.(event.pubkey)) return;
         if (this.knownIds.has(event.id)) return;
@@ -113,14 +115,15 @@ export class FeedOrchestrator implements FeedOrchestratorApi {
       followers,
       feedMode,
       listId,
-      lists
-    }: { follows: string[]; followers: string[]; feedMode: 'all' | 'follows' | 'followers' | 'both'; listId?: string; lists?: ListDescriptor[] },
+      lists,
+      tags
+    }: { follows: string[]; followers: string[]; feedMode: 'all' | 'follows' | 'followers' | 'both'; listId?: string; lists?: ListDescriptor[]; tags?: string[] },
     getEvents: () => NostrEvent[],
     onUpdate: (events: NostrEvent[]) => void
   ) {
     if (!this.oldest) return;
     const authors = resolveAuthors({ follows, followers, feedMode, listId, lists });
-    const older = await this.nostr.fetchOlderTimeline({ until: this.oldest - 1, authors, limit: 40 });
+    const older = await this.nostr.fetchOlderTimeline({ until: this.oldest - 1, authors, tags, limit: 40 });
     const unique = older.filter((event) => !this.knownIds.has(event.id) && !this.isBlocked?.(event.pubkey));
     if (unique.length === 0) return;
     unique.forEach((event) => this.knownIds.add(event.id));

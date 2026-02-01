@@ -61,6 +61,25 @@ export class MediaUploadService {
     return { url, sha256: ox || payloadHash };
   }
 
+  async uploadWithFallback(
+    file: File,
+    relays: string[],
+    onProgress?: (percent: number) => void,
+    preferredRelay?: string
+  ): Promise<UploadResult> {
+    const unique = dedupeRelays(relays, preferredRelay);
+    let lastError: unknown;
+    for (const relay of unique) {
+      try {
+        return await this.upload(file, relay, onProgress);
+      } catch (err) {
+        lastError = err;
+      }
+    }
+    const reason = lastError instanceof Error ? lastError.message : 'Upload failed';
+    throw new Error(`${reason}. Tried ${unique.length} relay(s).`);
+  }
+
   private async resolveApiUrl(relayBase: string): Promise<string> {
     const base = relayBase.replace(/\/$/, '');
     const wellKnown = `${base}/.well-known/nostr/nip96.json`;
@@ -86,4 +105,17 @@ function toBase64Hex(hex: string): string {
   let binary = '';
   uint8.forEach((b) => { binary += String.fromCharCode(b); });
   return btoa(binary);
+}
+
+function dedupeRelays(relays: string[], preferredRelay?: string) {
+  const list = relays.map((relay) => relay.trim()).filter(Boolean);
+  const ordered: string[] = [];
+  if (preferredRelay) ordered.push(preferredRelay.trim());
+  list.forEach((relay) => ordered.push(relay));
+  const seen = new Set<string>();
+  return ordered.filter((relay) => {
+    if (!relay || seen.has(relay)) return false;
+    seen.add(relay);
+    return true;
+  });
 }

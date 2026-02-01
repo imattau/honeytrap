@@ -24,7 +24,7 @@ export function AuthorView() {
     publishPost,
     mediaRelayList,
     settings,
-    uploadMedia
+    attachMedia
   } = useAppState();
   const [events, setEvents] = useState<NostrEvent[]>([]);
   const [profile, setProfile] = useState<ProfileMetadata | undefined>(undefined);
@@ -144,7 +144,7 @@ export function AuthorView() {
         onClose={() => setComposerOpen(false)}
         onSubmit={(input) => publishPost(input)}
         mediaRelays={mediaRelayList.length > 0 ? mediaRelayList : settings.mediaRelays}
-        onUpload={uploadMedia}
+        onAttachMedia={attachMedia}
       />
     </div>
   );

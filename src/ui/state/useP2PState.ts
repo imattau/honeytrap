@@ -99,12 +99,26 @@ export function useP2PState({
     return result;
   };
 
+  const seedMediaFile = async (file: File) => {
+    const buffer = await file.arrayBuffer();
+    const assist = await magnetBuilder.buildMediaPackageFromBytes(file.name || 'media.bin', buffer);
+    if (!assist.magnet || !assist.sha256) {
+      throw new Error('Unable to seed media');
+    }
+    return {
+      url: `p2p://sha256:${assist.sha256}`,
+      magnet: assist.magnet,
+      sha256: assist.sha256
+    };
+  };
+
   return {
     torrentRegistry,
     torrentSnapshot,
     canEncryptNip44,
     mediaAssist,
     magnetBuilder,
-    loadMedia
+    loadMedia,
+    seedMediaFile
   };
 }

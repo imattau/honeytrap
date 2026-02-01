@@ -13,10 +13,10 @@ interface ComposerProps {
   onClose: () => void;
   onSubmit: (input: ComposerInput) => Promise<void | NostrEvent>;
   mediaRelays?: string[];
-  onUpload?: (file: File, relay: string, onProgress?: (percent: number) => void) => Promise<{ url: string; sha256?: string }>;
+  onAttachMedia?: (files: File[], mode: 'relay' | 'p2p', options: { relays: string[]; preferredRelay?: string; onProgress?: (percent: number) => void }) => Promise<{ url: string; sha256?: string; magnet?: string }[]>;
 }
 
-export function Composer({ open, replyTo, onClose, onSubmit, mediaRelays = [], onUpload }: ComposerProps) {
+export function Composer({ open, replyTo, onClose, onSubmit, mediaRelays = [], onAttachMedia }: ComposerProps) {
   const [content, setContent] = useState('');
   const [media, setMedia] = useState<ComposerInput['media']>([]);
   const [selectedRelay, setSelectedRelay] = useState(mediaRelays[0] ?? '');
@@ -41,7 +41,7 @@ export function Composer({ open, replyTo, onClose, onSubmit, mediaRelays = [], o
       setError('Select a media relay');
       return;
     }
-    if (!onUpload) {
+    if (!onAttachMedia) {
       setError('Upload service unavailable');
       return;
     }
@@ -53,8 +53,15 @@ export function Composer({ open, replyTo, onClose, onSubmit, mediaRelays = [], o
         const file = list[i];
         setUploadState({ index: i + 1, total: list.length });
         setUploadProgress(0);
-        const result = await onUpload(file, selectedRelay, (percent) => setUploadProgress(percent));
-        setMedia((prev) => [...prev, { url: result.url, sha256: result.sha256 }]);
+        const mode = selectedRelay === '__p2p__' ? 'p2p' : 'relay';
+        const results = await onAttachMedia([file], mode, {
+          relays: mediaRelays,
+          preferredRelay: selectedRelay === '__p2p__' ? undefined : selectedRelay,
+          onProgress: (percent) => setUploadProgress(percent)
+        });
+        results.forEach((result) => {
+          setMedia((prev) => [...prev, { url: result.url, sha256: result.sha256, magnet: result.magnet }]);
+        });
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Upload failed');
@@ -117,6 +124,7 @@ export function Composer({ open, replyTo, onClose, onSubmit, mediaRelays = [], o
                 value={selectedRelay}
                 onChange={(event) => setSelectedRelay(event.target.value)}
               >
+                {onAttachMedia && <option value="__p2p__">P2P only (seed locally)</option>}
                 {mediaRelays.length === 0 && <option value="">No media relays</option>}
                 {mediaRelays.map((relay) => (
                   <option key={relay} value={relay}>{relay}</option>

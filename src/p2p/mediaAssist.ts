@@ -33,7 +33,8 @@ export class MediaAssist implements MediaAssistApi {
 
   private async fetch(source: AssistSource, allowP2P: boolean, timeoutMs: number): Promise<MediaAssistResult> {
     const canAssist = this.settings.enabled && this.settings.preferMedia && allowP2P;
-    if (!canAssist && !source.sha256) {
+    const isP2POnly = source.url.startsWith('p2p://');
+    if (!canAssist && !source.sha256 && !isP2POnly) {
       return { url: source.url, source: 'http' };
     }
     const result = await this.p2p.fetchWithAssist(source, timeoutMs, canAssist);

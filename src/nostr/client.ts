@@ -190,14 +190,17 @@ export class NostrClient implements NostrClientApi {
   async fetchOlderTimeline({
     until,
     authors,
+    tags,
     limit = 50
   }: {
     until: number;
     authors?: string[];
+    tags?: string[];
     limit?: number;
   }): Promise<NostrEvent[]> {
     const filter: Filter = { kinds: [1, 30023], limit, until };
     if (authors && authors.length > 0) filter.authors = authors;
+    if (tags && tags.length > 0) filter['#t'] = tags.map((tag) => tag.trim().replace(/^#/, '').toLowerCase()).filter(Boolean);
     const events = await this.safeQuerySync(filter);
     return events as NostrEvent[];
   }
