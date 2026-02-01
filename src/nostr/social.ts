@@ -13,6 +13,10 @@ export class SocialGraph implements SocialGraphApi {
     return this.settings.blocked.includes(pubkey);
   }
 
+  isNsfw(pubkey: string) {
+    return this.settings.nsfwAuthors.includes(pubkey);
+  }
+
   toggleFollow(pubkey: string): AppSettings {
     const follows = this.isFollowed(pubkey)
       ? this.settings.follows.filter((key) => key !== pubkey)
@@ -27,6 +31,13 @@ export class SocialGraph implements SocialGraphApi {
     const blocked = [...this.settings.blocked, pubkey];
     const follows = this.settings.follows.filter((key) => key !== pubkey);
     return { ...this.settings, blocked, follows };
+  }
+
+  toggleNsfw(pubkey: string): AppSettings {
+    if (this.isNsfw(pubkey)) {
+      return { ...this.settings, nsfwAuthors: this.settings.nsfwAuthors.filter((key) => key !== pubkey) };
+    }
+    return { ...this.settings, nsfwAuthors: [...this.settings.nsfwAuthors, pubkey] };
   }
 
   filterEvents(events: NostrEvent[]): NostrEvent[] {

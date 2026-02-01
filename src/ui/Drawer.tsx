@@ -39,6 +39,8 @@ export function Drawer() {
   const [isWide, setIsWide] = useState(false);
   const [menuState, setMenuState] = useState(() => buildMenuState(settings, relayList));
   const [relaysOpen, setRelaysOpen] = useState(false);
+  const fallbackAvatar = '/assets/honeytrap_logo_256.png';
+  const headerImage = '/assets/honeytrap_header_960.png';
 
   useEffect(() => {
     setMenuState(buildMenuState(settings, relayList));
@@ -131,6 +133,9 @@ export function Drawer() {
       )}
       {open && !isWide && <div className="drawer-backdrop" onClick={() => setOpen(false)} />}
       <div className={`top-drawer ${open ? 'open' : ''}`}>
+        <div className="menu-banner">
+          <img src={headerImage} alt="Honeytrap" />
+        </div>
         {!isAuthed ? (
           <MenuSection title="Sign in" icon={<KeyRound size={16} />} collapsible={false}>
               <button className="menu-button" onClick={handleNip07}>
@@ -177,7 +182,7 @@ export function Drawer() {
                   {selfProfile.picture ? (
                     <img src={selfProfile.picture} alt="avatar" className="drawer-avatar" />
                   ) : (
-                    <div className="drawer-avatar placeholder" />
+                    <img src={fallbackAvatar} alt="avatar" className="drawer-avatar fallback" />
                   )}
                   <div>
                     <div className="drawer-name">{selfProfile.display_name ?? selfProfile.name ?? 'Unknown'}</div>

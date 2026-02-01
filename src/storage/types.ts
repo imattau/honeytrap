@@ -23,6 +23,7 @@ export interface AppSettings {
   selectedListId?: string;
   follows: string[];
   blocked: string[];
+  nsfwAuthors: string[];
   feedMode: 'all' | 'follows' | 'followers' | 'both';
   mediaRelays: string[];
   wallet: WalletSettings;

@@ -1,13 +1,15 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Radio, Bolt, Link2, ShieldCheck, Sparkles, UserCircle, UserPlus, UserCheck, Ban } from 'lucide-react';
+import { Radio, Bolt, Link2, ShieldCheck, Sparkles, UserCircle, UserPlus, UserCheck, Ban, AlertTriangle } from 'lucide-react';
 import type { NostrEvent, ProfileMetadata } from '../nostr/types';
 import { extractMedia, type MediaSource } from '../nostr/media';
 import { extractLinks, type LinkPreviewSource } from '../nostr/links';
 import { parseLongFormTags } from '../nostr/utils';
 import { useAppState } from './AppState';
+import { useNavigate } from 'react-router-dom';
 import { decodeNostrUri } from '../nostr/uri';
 import { PostActions } from './PostActions';
 import { IconButton } from './IconButton';
+import { isSensitiveEvent } from '../nostr/contentFlags';
 
 interface PostCardProps {
   event: NostrEvent;
@@ -38,12 +40,17 @@ export function PostCard({
   forceExpanded = false,
   actionsPosition = 'bottom'
 }: PostCardProps) {
-  const { profiles, findEventById, selectEvent, selectAuthor, transport, loadMedia, isFollowed, isBlocked, toggleFollow, toggleBlock } = useAppState();
+  const { profiles, findEventById, selectEvent, selectAuthor, transport, loadMedia, isFollowed, isBlocked, isNsfwAuthor, toggleFollow, toggleBlock, toggleNsfwAuthor } = useAppState();
   const [expanded, setExpanded] = useState(false);
+  const [revealed, setRevealed] = useState(false);
+  const fallbackAvatar = '/assets/honeytrap_logo_256.png';
+  const navigate = useNavigate();
   const media = useMemo(() => extractMedia(event), [event]);
   const links = useMemo(() => extractLinks(event), [event]);
   const isLongForm = event.kind === 30023;
   const longForm = useMemo(() => (isLongForm ? parseLongFormTags(event.tags) : undefined), [event.tags, isLongForm]);
+  const nsfwAuthor = isNsfwAuthor(event.pubkey);
+  const isSensitive = useMemo(() => isSensitiveEvent(event) || nsfwAuthor, [event, nsfwAuthor]);
   const isExpanded = forceExpanded || expanded;
   const hasMore = showMoreButton && !forceExpanded && (event.content.length > 320 || media.length > 1 || links.length > 1);
   const visibleMedia = isExpanded || !showMoreButton ? media : media.slice(0, 1);
@@ -68,6 +75,7 @@ export function PostCard({
             onClick={(e) => {
               e.stopPropagation();
               selectAuthor(pubkey);
+              navigate(`/author/${pubkey}`);
             }}
           >
             <UserCircle size={14} />
@@ -117,10 +125,19 @@ export function PostCard({
           {profile?.picture ? (
             <img src={profile.picture} alt="avatar" className="post-avatar" />
           ) : (
-            <div className="post-avatar placeholder" />
+            <img src={fallbackAvatar} alt="avatar" className="post-avatar fallback" />
           )}
           <div>
-            <div className="post-name">{profile?.display_name ?? profile?.name ?? event.pubkey.slice(0, 12)}</div>
+            <div
+              className="post-name"
+              role="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                navigate(`/author/${event.pubkey}`);
+              }}
+            >
+              {profile?.display_name ?? profile?.name ?? event.pubkey.slice(0, 12)}
+            </div>
             <div className="post-time">{new Date(event.created_at * 1000).toLocaleString()}</div>
           </div>
           <div className="author-actions">
@@ -150,6 +167,19 @@ export function PostCard({
             >
               <Ban size={14} />
             </IconButton>
+            <IconButton
+              title={nsfwAuthor ? 'Unmark NSFW author' : 'Mark NSFW author'}
+              ariaLabel={nsfwAuthor ? 'Unmark NSFW author' : 'Mark NSFW author'}
+              active={nsfwAuthor}
+              tone="nsfw"
+              variant="author"
+              onClick={(e) => {
+                e.stopPropagation();
+                toggleNsfwAuthor(event.pubkey);
+              }}
+            >
+              <AlertTriangle size={14} />
+            </IconButton>
           </div>
         </div>
         <div className="post-icons">
@@ -178,7 +208,19 @@ export function PostCard({
         />
       )}
 
-      <div className={`post-content ${isExpanded ? 'expanded' : 'collapsed'}`} onClick={onOpenThread}>
+      {isSensitive && !revealed && (
+        <button
+          className="nsfw-reveal"
+          onClick={(e) => {
+            e.stopPropagation();
+            setRevealed(true);
+          }}
+        >
+          NSFW — tap to reveal
+        </button>
+      )}
+
+      <div className={`post-content ${isExpanded ? 'expanded' : 'collapsed'} ${isSensitive && !revealed ? 'nsfw-blur' : ''}`} onClick={onOpenThread}>
         {isLongForm ? (
           <div className="space-y-2">
             <div className="post-title">{longForm?.title ?? 'Untitled long-form'}</div>
@@ -190,7 +232,7 @@ export function PostCard({
       </div>
 
       {visibleMedia.length > 0 && (
-        <div className="post-media">
+        <div className={`post-media ${isSensitive && !revealed ? 'nsfw-blur' : ''}`}>
           {visibleMedia.map((item) => (
             <MediaItem
               key={item.url}
@@ -204,7 +246,7 @@ export function PostCard({
       )}
 
       {visibleLinks.length > 0 && (
-        <div className="post-links">
+        <div className={`post-links ${isSensitive && !revealed ? 'nsfw-blur' : ''}`}>
           {visibleLinks.map((item) => (
             <LinkPreviewCard key={item.url} item={item} />
           ))}

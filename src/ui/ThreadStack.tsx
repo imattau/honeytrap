@@ -13,7 +13,7 @@ export function ThreadStack() {
   const { id } = useParams<{ id: string }>();
   const location = useLocation();
   const navigate = useNavigate();
-  const { profiles, selectEvent, loadThread, publishReply, sendZap, settings } = useAppState();
+  const { profiles, selectEvent, loadThread, publishReply, sendZap, settings, findEventById } = useAppState();
   const [nodes, setNodes] = useState<ThreadNode[]>([]);
   const [touchStart, setTouchStart] = useState<number | null>(null);
   const [composerOpen, setComposerOpen] = useState(false);
@@ -25,22 +25,21 @@ export function ThreadStack() {
   useEffect(() => {
     if (!id) return;
     const stateEvent = (location.state as { event?: NostrEvent } | undefined)?.event;
+    const cached = findEventById(id);
     loadThread(id)
       .then((loaded) => {
         if (loaded.length > 0) {
           setNodes(loaded);
           return;
         }
-        if (stateEvent) {
-          setNodes([{ event: stateEvent, depth: 0, role: 'target' }]);
-        }
+        const fallback = stateEvent ?? cached;
+        if (fallback) setNodes([{ event: fallback, depth: 0, role: 'target' }]);
       })
       .catch(() => {
-        if (stateEvent) {
-          setNodes([{ event: stateEvent, depth: 0, role: 'target' }]);
-        }
+        const fallback = stateEvent ?? cached;
+        if (fallback) setNodes([{ event: fallback, depth: 0, role: 'target' }]);
       });
-  }, [id, loadThread, location.state]);
+  }, [id, loadThread, location.state, findEventById]);
 
   const isTouch = useMemo(() => window.matchMedia('(pointer: coarse)').matches, []);
 
@@ -78,6 +77,11 @@ export function ThreadStack() {
         className="thread-virtuoso"
         data={nodes}
         overscan={600}
+        components={{
+          EmptyPlaceholder: () => (
+            <div className="thread-empty">Loading thread…</div>
+          )
+        }}
         itemContent={(_, node) => (
           <div className="thread-item" data-depth={node.depth}>
             <PostCard

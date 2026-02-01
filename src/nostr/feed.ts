@@ -40,6 +40,14 @@ export class FeedOrchestrator implements FeedOrchestratorApi {
     this.paused = value;
   }
 
+  reset() {
+    this.knownIds.clear();
+    this.pending = [];
+    this.oldest = undefined;
+    this.hydrated = false;
+    this.pausedByBuffer = false;
+  }
+
   subscribe(
     {
       follows,

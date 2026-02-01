@@ -18,6 +18,7 @@ import { MediaAssist } from '../p2p/mediaAssist';
 import type { AssistSource } from '../p2p/types';
 import { SocialGraph } from '../nostr/social';
 import { NostrCache } from '../nostr/cache';
+import { AuthorService } from '../nostr/author';
 
 interface AppStateValue {
   settings: AppSettings;
@@ -60,9 +61,12 @@ interface AppStateValue {
   flushPending: () => void;
   isFollowed: (pubkey: string) => boolean;
   isBlocked: (pubkey: string) => boolean;
+  isNsfwAuthor: (pubkey: string) => boolean;
   toggleFollow: (pubkey: string) => void;
   toggleBlock: (pubkey: string) => void;
+  toggleNsfwAuthor: (pubkey: string) => void;
   setFeedMode: (mode: AppSettings['feedMode']) => void;
+  authorService: AuthorService;
   findEventById: (id: string) => NostrEvent | undefined;
 }
 
@@ -94,6 +98,10 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   const orchestrator = useMemo(
     () => new FeedOrchestrator(nostr, feedService, transportStore, (pubkey) => blockedRef.current.includes(pubkey)),
     [nostr, feedService, transportStore]
+  );
+  const authorService = useMemo(
+    () => new AuthorService(nostr, transportStore, (pubkey) => blockedRef.current.includes(pubkey)),
+    [nostr, transportStore]
   );
   const threadService = useMemo(
     () => new ThreadService(nostr, transportStore, (pubkey) => blockedRef.current.includes(pubkey)),
@@ -230,6 +238,8 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   }, [events]);
 
   const subscribeFeed = useCallback(() => {
+    orchestrator.reset();
+    setEvents([]);
     orchestrator.subscribe(
       { follows: settings.follows, followers, feedMode: settings.feedMode, listId: settings.selectedListId },
       () => eventsRef.current,
@@ -305,6 +315,11 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     return graph.isBlocked(pubkey);
   }, [settings]);
 
+  const isNsfwAuthor = useCallback((pubkey: string) => {
+    const graph = new SocialGraph(settings);
+    return graph.isNsfw(pubkey);
+  }, [settings]);
+
   const toggleFollow = useCallback((pubkey: string) => {
     const graph = new SocialGraph(settings);
     updateSettings(graph.toggleFollow(pubkey));
@@ -313,6 +328,11 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   const toggleBlock = useCallback((pubkey: string) => {
     const graph = new SocialGraph(settings);
     updateSettings(graph.toggleBlock(pubkey));
+  }, [settings, updateSettings]);
+
+  const toggleNsfwAuthor = useCallback((pubkey: string) => {
+    const graph = new SocialGraph(settings);
+    updateSettings(graph.toggleNsfw(pubkey));
   }, [settings, updateSettings]);
 
   const setFeedMode = useCallback((mode: AppSettings['feedMode']) => {
@@ -397,9 +417,12 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
         flushPending,
         isFollowed,
         isBlocked,
+        isNsfwAuthor,
         toggleFollow,
         toggleBlock,
+        toggleNsfwAuthor,
         setFeedMode,
+        authorService,
         findEventById
       }}
     >

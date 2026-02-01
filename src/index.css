@@ -114,10 +114,15 @@ body {
   background: #1b222c;
 }
 
+.post-avatar.fallback {
+  border: 1px solid #1b222c;
+}
+
 .post-name {
   font-family: 'Sora', sans-serif;
   font-size: 16px;
   font-weight: 600;
+  cursor: pointer;
 }
 
 .post-time {
@@ -197,6 +202,12 @@ body {
   box-shadow: 0 0 12px rgba(248, 113, 113, 0.35);
 }
 
+.icon-button.is-nsfw.is-active {
+  border-color: rgba(251, 191, 36, 0.7);
+  color: #fbbf24;
+  box-shadow: 0 0 12px rgba(251, 191, 36, 0.35);
+}
+
 .post-content.collapsed {
   max-height: 220px;
   overflow: hidden;
@@ -205,6 +216,21 @@ body {
 .post-content.expanded {
   max-height: none;
   overflow: visible;
+}
+
+.nsfw-blur {
+  filter: blur(16px);
+  pointer-events: none;
+}
+
+.nsfw-reveal {
+  border: 1px solid rgba(248, 113, 113, 0.5);
+  color: #fca5a5;
+  background: rgba(8, 12, 18, 0.7);
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 12px;
+  align-self: flex-start;
 }
 
 .post-text {
@@ -393,6 +419,20 @@ body {
   transform: translateY(0);
 }
 
+.menu-banner {
+  width: 100%;
+  border-radius: 16px;
+  overflow: hidden;
+  border: 1px solid #1b222c;
+  margin-bottom: 12px;
+}
+
+.menu-banner img {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
 @media (min-width: 1024px) {
   .app-shell {
     padding-left: 320px;
@@ -469,6 +509,10 @@ body {
 
 .drawer-avatar.placeholder {
   background: #1b222c;
+}
+
+.drawer-avatar.fallback {
+  border: 1px solid #1b222c;
 }
 
 .drawer-name {
@@ -760,6 +804,87 @@ body {
   padding: 12px 0;
 }
 
+.thread-empty {
+  padding: 24px;
+  text-align: center;
+  color: #8fa4bf;
+}
+
+.author-view {
+  height: 100%;
+  display: grid;
+  grid-template-rows: auto 1fr;
+}
+
+.author-header {
+  padding: 24px 16px 12px;
+  display: grid;
+  gap: 12px;
+}
+
+.author-back {
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  border: 1px solid #1b222c;
+  background: rgba(8, 12, 18, 0.8);
+  color: #c9d3e0;
+  display: grid;
+  place-items: center;
+}
+
+.author-card {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  background: #11151b;
+  border: 1px solid #1b222c;
+  border-radius: 20px;
+  padding: 16px;
+}
+
+.author-avatar {
+  width: 64px;
+  height: 64px;
+  border-radius: 999px;
+  object-fit: cover;
+  background: #1b222c;
+}
+
+.author-avatar.fallback {
+  border: 1px solid #1b222c;
+}
+
+.author-name {
+  font-family: 'Sora', sans-serif;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.author-sub {
+  font-size: 12px;
+  color: #94a3b8;
+  word-break: break-all;
+}
+
+.author-about {
+  margin-top: 6px;
+  font-size: 13px;
+  color: #cbd5e1;
+  line-height: 1.5;
+}
+
+.author-controls {
+  margin-top: 10px;
+  display: inline-flex;
+  gap: 8px;
+}
+
+.author-empty {
+  padding: 24px;
+  text-align: center;
+  color: #8fa4bf;
+}
 .thread-close {
   position: fixed;
   right: 20px;

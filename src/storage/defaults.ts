@@ -8,6 +8,7 @@ export const defaultSettings: AppSettings = {
   ],
   follows: [],
   blocked: [],
+  nsfwAuthors: [],
   feedMode: 'all',
   mediaRelays: [
     'https://blossom.primal.net',

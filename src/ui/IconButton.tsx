@@ -6,7 +6,7 @@ interface IconButtonProps {
   active?: boolean;
   onClick?: (event: React.MouseEvent) => void;
   variant?: 'neon' | 'author';
-  tone?: 'relay' | 'p2p' | 'http' | 'verified' | 'follow' | 'block';
+  tone?: 'relay' | 'p2p' | 'http' | 'verified' | 'follow' | 'block' | 'nsfw';
   className?: string;
   children: React.ReactNode;
 }

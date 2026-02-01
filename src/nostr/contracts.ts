@@ -95,8 +95,10 @@ export interface EventSignerApi {
 export interface SocialGraphApi {
   isFollowed(pubkey: string): boolean;
   isBlocked(pubkey: string): boolean;
+  isNsfw(pubkey: string): boolean;
   toggleFollow(pubkey: string): AppSettings;
   toggleBlock(pubkey: string): AppSettings;
+  toggleNsfw(pubkey: string): AppSettings;
   filterEvents(events: NostrEvent[]): NostrEvent[];
 }
 

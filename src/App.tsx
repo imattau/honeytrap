@@ -5,6 +5,7 @@ import { AppStateProvider, useAppState } from './ui/AppState';
 import { Drawer } from './ui/Drawer';
 import { PostCard } from './ui/PostCard';
 import { ThreadStack } from './ui/ThreadStack';
+import { AuthorView } from './ui/AuthorView';
 
 const FEED_SCROLL_KEY = 'honeytrap:feed-scroll-top';
 
@@ -93,6 +94,7 @@ function AppRoutes() {
     <Routes>
       <Route path="/" element={<Feed />} />
       <Route path="/thread/:id" element={<ThreadStack />} />
+      <Route path="/author/:pubkey" element={<AuthorView />} />
     </Routes>
   );
 }
