@@ -5,10 +5,10 @@ import { VitePWA } from 'vite-plugin-pwa';
 export default defineConfig({
   assetsInclude: ['**/*.wasm'],
   server: {
-    allowedHosts: 'all'
+    allowedHosts: true
   },
   preview: {
-    allowedHosts: 'all'
+    allowedHosts: true
   },
   plugins: [
     react(),
