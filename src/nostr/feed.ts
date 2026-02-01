@@ -46,7 +46,13 @@ export class FeedOrchestrator implements FeedOrchestratorApi {
 
   setPaused(value: boolean) {
     const wasPaused = this.paused;
+    if (wasPaused === value) return;
     this.paused = value;
+    if (value) {
+      this.service.stop();
+      return;
+    }
+    this.startLiveSubscription();
     if (wasPaused && !value) {
       this.resumeIfBuffered();
     }
@@ -105,41 +111,7 @@ export class FeedOrchestrator implements FeedOrchestratorApi {
       })
       .catch(() => null);
 
-    this.service.subscribeTimeline({
-      authors,
-      tags,
-      onEvent: (event) => {
-        if (this.isBlocked?.(event.pubkey)) return;
-        if (authorSet && !authorSet.has(event.pubkey)) return;
-        if (normalizedTags.length > 0 && !matchesTag(event, normalizedTags)) return;
-        if (this.knownIds.has(event.id)) return;
-        this.knownIds.add(event.id);
-        if (this.paused && this.hydrated) {
-          this.pending.push(event);
-          if (this.pending.length > MAX_BUFFER) {
-            this.pending.length = MAX_BUFFER;
-          }
-          return;
-        }
-        this.markTransport(event);
-        this.onEventAssist?.(event);
-        this.pending.push(event);
-        if (this.pending.length > MAX_BUFFER) {
-          this.pending.length = MAX_BUFFER;
-        }
-        onPending?.(this.pending.length);
-        this.profileQueue.add(event.pubkey);
-        if (!this.hydrated) {
-          const merged = this.flush(getEvents());
-          onUpdate(merged);
-          this.hydrated = true;
-        } else if (!this.paused) {
-          const merged = this.flush(getEvents());
-          onUpdate(merged);
-        }
-        this.drainProfiles(onProfiles);
-      }
-    });
+    this.startLiveSubscription();
   }
 
   stop() {
@@ -223,6 +195,70 @@ export class FeedOrchestrator implements FeedOrchestratorApi {
         });
     };
     this.profileDrainTimer = globalThis.setTimeout(run, 120);
+  }
+
+  private startLiveSubscription() {
+    if (this.paused) return;
+    if (!this.lastContext || !this.lastGetEvents || !this.lastOnUpdate || !this.lastOnProfiles) return;
+    const { follows, followers, feedMode, listId, lists, tags } = this.lastContext;
+    const getEvents = this.lastGetEvents;
+    const onUpdate = this.lastOnUpdate;
+    const onProfiles = this.lastOnProfiles;
+    const onPending = this.lastOnPending;
+    const authors = resolveAuthors({ follows, followers, feedMode, listId, lists });
+    const authorSet = authors && authors.length > 0 ? new Set(authors) : undefined;
+    const normalizedTags = normalizeTags(tags);
+    const requiresAuthorFilter = feedMode !== 'all' || Boolean(listId);
+    if (requiresAuthorFilter && (!authors || authors.length === 0)) {
+      onUpdate([]);
+      onPending?.(0);
+      return;
+    }
+    this.service.subscribeTimeline({
+      authors,
+      tags,
+      onEvent: (event) => this.handleIncomingEvent(event, authorSet, normalizedTags, getEvents, onUpdate, onProfiles, onPending)
+    });
+  }
+
+  private handleIncomingEvent(
+    event: NostrEvent,
+    authorSet: Set<string> | undefined,
+    normalizedTags: string[],
+    getEvents: () => NostrEvent[],
+    onUpdate: (events: NostrEvent[]) => void,
+    onProfiles: (profiles: Record<string, ProfileMetadata>) => void,
+    onPending?: (count: number) => void
+  ) {
+    if (this.isBlocked?.(event.pubkey)) return;
+    if (authorSet && !authorSet.has(event.pubkey)) return;
+    if (normalizedTags.length > 0 && !matchesTag(event, normalizedTags)) return;
+    if (this.knownIds.has(event.id)) return;
+    this.knownIds.add(event.id);
+    if (this.paused && this.hydrated) {
+      this.pending.push(event);
+      if (this.pending.length > MAX_BUFFER) {
+        this.pending.length = MAX_BUFFER;
+      }
+      return;
+    }
+    this.markTransport(event);
+    this.onEventAssist?.(event);
+    this.pending.push(event);
+    if (this.pending.length > MAX_BUFFER) {
+      this.pending.length = MAX_BUFFER;
+    }
+    onPending?.(this.pending.length);
+    this.profileQueue.add(event.pubkey);
+    if (!this.hydrated) {
+      const merged = this.flush(getEvents());
+      onUpdate(merged);
+      this.hydrated = true;
+    } else if (!this.paused) {
+      const merged = this.flush(getEvents());
+      onUpdate(merged);
+    }
+    this.drainProfiles(onProfiles);
   }
 
   private flush(existing: NostrEvent[]): NostrEvent[] {

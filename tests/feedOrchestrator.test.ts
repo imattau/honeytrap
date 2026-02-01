@@ -4,10 +4,15 @@ import { FeedOrchestrator } from '../src/nostr/feed';
 
 class FakeService {
   onEvent?: (event: NostrEvent) => void;
+  subscribeCalls = 0;
+  stopCalls = 0;
   subscribeTimeline({ onEvent }: { onEvent: (event: NostrEvent) => void }) {
+    this.subscribeCalls += 1;
     this.onEvent = onEvent;
   }
-  stop() {}
+  stop() {
+    this.stopCalls += 1;
+  }
 }
 
 class FakeClient {}
@@ -194,5 +199,25 @@ describe('FeedOrchestrator filtering', () => {
     orchestrator.setPaused(false);
     expect(updates.length).toBe(2);
     expect(updates[1]?.some((event) => event.id === 'buffered')).toBe(true);
+  });
+
+  it('stops live subscription when paused and restarts on resume', () => {
+    const service = new FakeService();
+    const client = new FakeClient();
+    const orchestrator = new FeedOrchestrator(client as any, service as any);
+
+    orchestrator.subscribe(
+      { follows: ['alice'], followers: [], feedMode: 'follows' },
+      () => [],
+      () => null,
+      () => null
+    );
+    expect(service.subscribeCalls).toBe(1);
+
+    orchestrator.setPaused(true);
+    expect(service.stopCalls).toBe(1);
+
+    orchestrator.setPaused(false);
+    expect(service.subscribeCalls).toBe(2);
   });
 });
