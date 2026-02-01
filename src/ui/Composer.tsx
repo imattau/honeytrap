@@ -27,14 +27,13 @@ export function Composer({ open, replyTo, onClose, onSubmit, mediaRelays = [], o
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  if (!open) return null;
-
   useEffect(() => {
     if (!selectedRelay && mediaRelays.length > 0) {
       setSelectedRelay(mediaRelays[0]);
     }
   }, [mediaRelays, selectedRelay]);
+
+  if (!open) return null;
 
   const handleUpload = async (files?: FileList | null) => {
     if (!files || files.length === 0) return;
