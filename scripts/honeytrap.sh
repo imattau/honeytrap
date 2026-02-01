@@ -170,6 +170,14 @@ UNIT
   maybe_sudo systemctl enable --now "$service"
 }
 
+ensure_permissions() {
+  local user="${SUDO_USER:-$USER}"
+  if [ -z "$APP_DIR" ]; then return; fi
+  if [ ! -d "$APP_DIR" ]; then return; fi
+  log "Ensuring ${APP_DIR} ownership for ${user}."
+  maybe_sudo chown -R "${user}:${user}" "$APP_DIR"
+}
+
 restart_service() {
   maybe_sudo systemctl restart "${APP_NAME}.service" || true
 }
@@ -375,6 +383,7 @@ handle_install() {
   ensure_app_dir
   install_node
   clone_or_sync_repo
+  ensure_permissions
   install_deps_and_build
   write_systemd_service
   setup_proxy
@@ -400,6 +409,7 @@ handle_update() {
   fi
   log "Pulling updates."
   (cd "$APP_DIR" && git pull --ff-only)
+  ensure_permissions
   install_deps_and_build
   restart_service
   log "Update complete."
