@@ -455,6 +455,21 @@ body {
   -webkit-overflow-scrolling: touch;
 }
 
+.drawer-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  border: 1px solid #1b222c;
+  background: rgba(8, 12, 18, 0.8);
+  color: #d1dae6;
+  display: grid;
+  place-items: center;
+  z-index: 5;
+}
+
 .top-drawer.open {
   transform: translateY(0);
 }

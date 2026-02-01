@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { KeyRound, QrCode, ShieldAlert, UserCircle } from 'lucide-react';
+import { KeyRound, QrCode, ShieldAlert, UserCircle, X } from 'lucide-react';
 import { QRCodeCanvas } from 'qrcode.react';
 import { useAppState } from './AppState';
 import { decodeKey } from '../nostr/auth';
@@ -136,6 +136,11 @@ export function Drawer() {
       )}
       {open && !isWide && <div className="drawer-backdrop" onClick={() => setOpen(false)} />}
       <div className={`top-drawer ${open ? 'open' : ''}`}>
+        {!isWide && (
+          <button className="drawer-close" onClick={() => setOpen(false)} aria-label="Close menu">
+            <X size={18} />
+          </button>
+        )}
         <div className="menu-banner">
           <img src={headerImage} alt="Honeytrap" />
         </div>
