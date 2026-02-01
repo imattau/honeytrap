@@ -8,7 +8,7 @@ import type { NostrClientApi } from './contracts';
 import type { NostrCache } from './cache';
 
 export class NostrClient implements NostrClientApi {
-  private pool = new SimplePool();
+  private pool = new SimplePool({ enablePing: true, enableReconnect: true });
   private relays: string[] = [];
   private relaySet = new Set<string>();
   private cache?: NostrCache;
