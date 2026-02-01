@@ -10,6 +10,7 @@ import { decodeNostrUri } from '../nostr/uri';
 import { PostActions } from './PostActions';
 import { IconButton } from './IconButton';
 import { isSensitiveEvent } from '../nostr/contentFlags';
+import { useTransportStatus } from './state/useTransportStatus';
 
 interface PostCardProps {
   event: NostrEvent;
@@ -40,7 +41,7 @@ export function PostCard({
   forceExpanded = false,
   actionsPosition = 'bottom'
 }: PostCardProps) {
-  const { profiles, findEventById, selectEvent, selectAuthor, transport, loadMedia, isFollowed, isBlocked, isNsfwAuthor, toggleFollow, toggleBlock, toggleNsfwAuthor } = useAppState();
+  const { profiles, findEventById, selectEvent, selectAuthor, transportStore, loadMedia, isFollowed, isBlocked, isNsfwAuthor, toggleFollow, toggleBlock, toggleNsfwAuthor } = useAppState();
   const [expanded, setExpanded] = useState(false);
   const [revealed, setRevealed] = useState(false);
   const [liked, setLiked] = useState(false);
@@ -118,7 +119,7 @@ export function PostCard({
     });
   };
 
-  const status = transport[event.id] ?? {};
+  const status = useTransportStatus(transportStore, event.id);
 
   const followed = isFollowed(event.pubkey);
   const blocked = isBlocked(event.pubkey);

@@ -157,7 +157,7 @@ export function useP2PState({
     return () => window.clearInterval(timer);
   }, [mediaAssist]);
 
-  const loadMedia = async ({
+  const loadMedia = useCallback(async ({
     eventId,
     source,
     authorPubkey,
@@ -168,9 +168,11 @@ export function useP2PState({
     authorPubkey: string;
     timeoutMs?: number;
   }) => {
+    const currentSettings = settingsRef.current;
+    const currentKeys = keysRef.current;
     const isP2POnly = source.url.startsWith('p2p://');
-    const isSelf = Boolean(keysNpub && authorPubkey === keysNpub);
-    const allowP2P = isP2POnly || isSelf || settings.p2p.scope === 'everyone' || settings.follows.includes(authorPubkey);
+    const isSelf = Boolean(currentKeys && authorPubkey === currentKeys);
+    const allowP2P = isP2POnly || isSelf || currentSettings.p2p.scope === 'everyone' || currentSettings.follows.includes(authorPubkey);
     const availabilityMs = isSelf ? OWN_AVAILABILITY_MS : OTHER_AVAILABILITY_MS;
     const availableUntil = source.magnet && source.url.startsWith('http')
       ? Date.now() + availabilityMs
@@ -181,16 +183,16 @@ export function useP2PState({
       authorPubkey,
       availableUntil
     };
-    const shouldReseed = settings.p2p.enabled && allowP2P && Boolean(source.magnet) && source.url.startsWith('http');
+    const shouldReseed = currentSettings.p2p.enabled && allowP2P && Boolean(source.magnet) && source.url.startsWith('http');
     const result = await mediaAssist.load(assistSource, allowP2P, timeoutMs ?? 2000);
     transportStore.mark(eventId, { [result.source]: true });
     if (result.source === 'http' && shouldReseed) {
       transportStore.mark(eventId, { p2p: true });
     }
     return result;
-  };
+  }, [mediaAssist, transportStore, OWN_AVAILABILITY_MS, OTHER_AVAILABILITY_MS]);
 
-  const seedMediaFile = async (file: File) => {
+  const seedMediaFile = useCallback(async (file: File) => {
     const buffer = await file.arrayBuffer();
     const assist = await magnetBuilder.buildMediaPackageFromBytes(file.name || 'media.bin', buffer);
     if (!assist.magnet || !assist.sha256) {
@@ -201,9 +203,9 @@ export function useP2PState({
       magnet: assist.magnet,
       sha256: assist.sha256
     };
-  };
+  }, [magnetBuilder]);
 
-  const reseedTorrent = (magnet: string) => {
+  const reseedTorrent = useCallback((magnet: string) => {
     const client = webtorrentHub.getClient();
     torrentRegistry.start({ magnet, mode: 'seed' });
     if (!client) {
@@ -228,7 +230,7 @@ export function useP2PState({
       torrent.on('error', () => torrentRegistry.finish(magnet));
       torrent.on('close', () => torrentRegistry.finish(magnet));
     });
-  };
+  }, [torrentRegistry, webtorrentHub]);
 
   const assistEvent = useCallback(async (event: NostrEvent) => {
     const authorPubkey = event.pubkey;

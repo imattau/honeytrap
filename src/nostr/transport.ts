@@ -2,13 +2,16 @@ import type { TransportStoreApi } from './contracts';
 import type { TransportStatus } from './transportTypes';
 
 type TransportListener = (snapshot: Record<string, TransportStatus>) => void;
+type TransportKeyListener = () => void;
+const EMPTY_STATUS: TransportStatus = Object.freeze({});
 
 export class TransportStore implements TransportStoreApi {
   private map = new Map<string, TransportStatus>();
   private listeners = new Set<TransportListener>();
+  private keyListeners = new Map<string, Set<TransportKeyListener>>();
 
   get(id: string): TransportStatus {
-    return this.map.get(id) ?? {};
+    return this.map.get(id) ?? EMPTY_STATUS;
   }
 
   mark(id: string, patch: TransportStatus) {
@@ -16,7 +19,7 @@ export class TransportStore implements TransportStoreApi {
     const next: TransportStatus = { ...current, ...patch };
     if (shallowEqual(current, next)) return;
     this.map.set(id, next);
-    this.emit();
+    this.emit(id);
   }
 
   subscribe(listener: TransportListener) {
@@ -35,9 +38,23 @@ export class TransportStore implements TransportStoreApi {
     return snapshot;
   }
 
-  private emit() {
+  subscribeKey(id: string, listener: TransportKeyListener) {
+    const bucket = this.keyListeners.get(id) ?? new Set<TransportKeyListener>();
+    bucket.add(listener);
+    this.keyListeners.set(id, bucket);
+    return () => {
+      const existing = this.keyListeners.get(id);
+      if (!existing) return;
+      existing.delete(listener);
+      if (existing.size === 0) this.keyListeners.delete(id);
+    };
+  }
+
+  private emit(id?: string) {
     const snapshot = this.snapshot();
     this.listeners.forEach((listener) => listener(snapshot));
+    if (!id) return;
+    this.keyListeners.get(id)?.forEach((listener) => listener());
   }
 }
 

@@ -6,7 +6,6 @@ import { NostrClient } from '../nostr/client';
 import { ThreadService, type ThreadNode } from '../nostr/thread';
 import { PublishService, type PublishInput } from '../nostr/publish';
 import { ZapService } from '../nostr/zaps';
-import type { TransportStatus } from '../nostr/transportTypes';
 import type { AssistSource } from '../p2p/types';
 import { NostrCache } from '../nostr/cache';
 import { AuthorService } from '../nostr/author';
@@ -23,6 +22,7 @@ import { useRelayState } from './state/useRelayState';
 import { useSocialState } from './state/useSocialState';
 import { useP2PState } from './state/useP2PState';
 import { useFeedState } from './state/useFeedState';
+import type { TransportStore } from '../nostr/transport';
 
 interface AppStateValue {
   settings: AppSettings;
@@ -59,7 +59,7 @@ interface AppStateValue {
     amountSats: number;
     comment?: string;
   }) => Promise<void>;
-  transport: Record<string, TransportStatus>;
+  transportStore: TransportStore;
   torrents: TorrentSnapshot;
   canEncryptNip44: boolean;
   loadMedia: (input: {
@@ -93,7 +93,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   const nostr = useMemo(() => new NostrClient(), []);
   const nostrCache = useMemo(() => new NostrCache(), []);
   const { keys, signer, nip44Cipher, loadKeysFromStorage, saveKeyRecord, clearKeys, connectNip07, connectRemoteSigner, disconnectRemoteSigner } = useAuthState();
-  const { transportStore, transport } = useTransportState();
+  const { transportStore } = useTransportState();
   const { settings, updateSettings } = useSettingsState(defaultSettings);
   const settingsRef = useRef(settings);
   const blockedRef = useRef<string[]>([]);
@@ -382,7 +382,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
         publishPost,
         publishReply,
         sendZap,
-        transport,
+        transportStore,
         torrents: torrentSnapshot,
         canEncryptNip44,
         loadMedia,
