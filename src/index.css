@@ -8,11 +8,25 @@
 
 html, body, #root {
   height: 100%;
+  width: 100%;
+  max-width: 100%;
+}
+
+@supports (height: 100dvh) {
+  html, body, #root {
+    height: 100dvh;
+  }
+  .app-shell {
+    min-height: 100dvh;
+  }
 }
 
 body {
   margin: 0;
   min-height: 100%;
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
   background: radial-gradient(1000px 600px at 15% 20%, rgba(56, 121, 255, 0.08), transparent),
     radial-gradient(900px 500px at 85% 10%, rgba(100, 255, 226, 0.06), transparent),
     #0b0d10;
@@ -21,6 +35,8 @@ body {
 
 .app-shell {
   height: 100%;
+  width: 100%;
+  max-width: 100%;
   color: #e5edf7;
 }
 
@@ -455,6 +471,12 @@ body {
   -webkit-overflow-scrolling: touch;
 }
 
+@supports (height: 100dvh) {
+  .top-drawer {
+    max-height: 100dvh;
+  }
+}
+
 .drawer-close {
   position: absolute;
   top: 12px;
@@ -848,6 +870,12 @@ body {
   height: 100vh;
   padding: 80px 16px 24px;
   position: relative;
+}
+
+@supports (height: 100dvh) {
+  .thread-stack {
+    height: 100dvh;
+  }
 }
 
 .thread-virtuoso {
