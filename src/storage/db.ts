@@ -24,6 +24,7 @@ interface HoneytrapDB extends DBSchema {
 
 const DB_NAME = 'honeytrap';
 const DB_VERSION = 2;
+const KEYS_STORAGE_KEY = 'honeytrap:keys';
 
 export const dbPromise = openDB<HoneytrapDB>(DB_NAME, DB_VERSION, {
   upgrade(db) {
@@ -56,13 +57,42 @@ export async function saveSettings(settings: AppSettings): Promise<void> {
 }
 
 export async function loadKeys(): Promise<KeyRecord | undefined> {
-  const db = await dbPromise;
-  return db.get('keys', 'default');
+  try {
+    const db = await dbPromise;
+    const stored = await db.get('keys', 'default');
+    if (stored && stored.npub) return stored;
+  } catch {
+    // fall back to localStorage
+  }
+  if (typeof window === 'undefined') return undefined;
+  try {
+    const raw = window.localStorage.getItem(KEYS_STORAGE_KEY);
+    if (!raw) return undefined;
+    const parsed = JSON.parse(raw) as KeyRecord;
+    if (parsed?.npub) return parsed;
+  } catch {
+    return undefined;
+  }
+  return undefined;
 }
 
 export async function saveKeys(keys: KeyRecord): Promise<void> {
-  const db = await dbPromise;
-  await db.put('keys', keys, 'default');
+  try {
+    const db = await dbPromise;
+    await db.put('keys', keys, 'default');
+  } catch {
+    // fall back to localStorage
+  }
+  if (typeof window === 'undefined') return;
+  try {
+    if (!keys.npub) {
+      window.localStorage.removeItem(KEYS_STORAGE_KEY);
+      return;
+    }
+    window.localStorage.setItem(KEYS_STORAGE_KEY, JSON.stringify(keys));
+  } catch {
+    // ignore
+  }
 }
 
 export async function cacheEvent(event: CachedEvent): Promise<void> {

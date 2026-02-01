@@ -53,7 +53,7 @@ export class NostrClient implements NostrClientApi {
   async fetchProfile(pubkey: string): Promise<ProfileMetadata | undefined> {
     const cached = await this.cache?.getProfile(pubkey);
     if (cached) return cached;
-    const events = await this.pool.querySync(this.relays, { kinds: [0], authors: [pubkey], limit: 1 });
+    const events = await this.safeQuerySync({ kinds: [0], authors: [pubkey], limit: 1 });
     const event = events[0] as NostrEvent | undefined;
     if (!event) return undefined;
     try {
@@ -66,7 +66,7 @@ export class NostrClient implements NostrClientApi {
   }
 
   async fetchLists(pubkey: string): Promise<ListDescriptor[]> {
-    const events = await this.pool.querySync(this.relays, {
+    const events = await this.safeQuerySync({
       kinds: [30000, 30001, 30002, 30003, 30004, 30005],
       authors: [pubkey]
     });
@@ -81,7 +81,7 @@ export class NostrClient implements NostrClientApi {
   async fetchReplies(eventId: string): Promise<NostrEvent[]> {
     const cached = await this.cache?.getReplies(eventId);
     if (cached) return cached;
-    const events = await this.pool.querySync(this.relays, { kinds: [1], '#e': [eventId], limit: 50 });
+    const events = await this.safeQuerySync({ kinds: [1], '#e': [eventId], limit: 50 });
     const list = events as NostrEvent[];
     await this.cache?.setReplies(eventId, list);
     return list;
@@ -90,7 +90,7 @@ export class NostrClient implements NostrClientApi {
   async fetchFollowers(pubkey: string, limit = 200): Promise<string[]> {
     const cached = await this.cache?.getFollowers(pubkey);
     if (cached) return cached;
-    const events = await this.pool.querySync(this.relays, {
+    const events = await this.safeQuerySync({
       kinds: [3],
       '#p': [pubkey],
       limit
@@ -107,7 +107,7 @@ export class NostrClient implements NostrClientApi {
   async fetchFollowing(pubkey: string): Promise<string[]> {
     const cached = await this.cache?.getFollowing(pubkey);
     if (cached) return cached;
-    const events = await this.pool.querySync(this.relays, {
+    const events = await this.safeQuerySync({
       kinds: [3],
       authors: [pubkey],
       limit: 10
@@ -126,7 +126,7 @@ export class NostrClient implements NostrClientApi {
   async fetchRelayList(pubkey: string): Promise<string[]> {
     const cached = await this.cache?.getRelayList(pubkey);
     if (cached) return cached;
-    const events = await this.pool.querySync(this.relays, {
+    const events = await this.safeQuerySync({
       kinds: [10002],
       authors: [pubkey],
       limit: 1
@@ -145,7 +145,7 @@ export class NostrClient implements NostrClientApi {
   async fetchMediaRelayList(pubkey: string): Promise<string[]> {
     const cached = await this.cache?.getMediaRelayList(pubkey);
     if (cached) return cached;
-    const events = await this.pool.querySync(this.relays, {
+    const events = await this.safeQuerySync({
       kinds: [30000],
       authors: [pubkey],
       '#d': ['media-relays'],
@@ -165,7 +165,7 @@ export class NostrClient implements NostrClientApi {
   async fetchEventById(id: string): Promise<NostrEvent | undefined> {
     const cached = await this.cache?.getEvent(id);
     if (cached) return cached;
-    const events = await this.pool.querySync(this.relays, { ids: [id], limit: 1 });
+    const events = await this.safeQuerySync({ ids: [id], limit: 1 });
     const event = events[0] as NostrEvent | undefined;
     if (event) await this.cache?.setEvent(event);
     return event;
@@ -186,8 +186,17 @@ export class NostrClient implements NostrClientApi {
   }): Promise<NostrEvent[]> {
     const filter: Filter = { kinds: [1, 30023], limit, until };
     if (authors && authors.length > 0) filter.authors = authors;
-    const events = await this.pool.querySync(this.relays, filter);
+    const events = await this.safeQuerySync(filter);
     return events as NostrEvent[];
+  }
+
+  private async safeQuerySync(filter: Filter): Promise<NostrEvent[]> {
+    try {
+      const events = await this.pool.querySync(this.relays, filter);
+      return events as NostrEvent[];
+    } catch {
+      return [];
+    }
   }
 
   async publishList({
