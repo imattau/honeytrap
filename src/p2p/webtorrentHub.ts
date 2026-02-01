@@ -50,7 +50,13 @@ export class WebTorrentHub {
   }
 
   ensure(magnet: string, onAdd: (torrent: Torrent) => void): Torrent {
-    return this.add(magnet, onAdd);
+    if (!this.client) throw new Error('WebTorrent disabled');
+    const existing = this.client.get(magnet);
+    if (existing) {
+      onAdd(existing);
+      return existing;
+    }
+    return this.client.add(magnet, onAdd);
   }
 
   private createClient(settings: P2PSettings, existing?: WebTorrent) {
