@@ -81,7 +81,6 @@ export class FeedOrchestrator implements FeedOrchestratorApi {
           onPending?.(this.pending.length);
           if (!this.pausedByBuffer) {
             this.pausedByBuffer = true;
-            this.service.stop();
           }
         }
         this.profileQueue.add(event.pubkey);
@@ -105,9 +104,7 @@ export class FeedOrchestrator implements FeedOrchestratorApi {
 
   resumeIfBuffered() {
     if (!this.pausedByBuffer) return;
-    if (!this.lastContext || !this.lastGetEvents || !this.lastOnUpdate || !this.lastOnProfiles) return;
     this.pausedByBuffer = false;
-    this.subscribe(this.lastContext, this.lastGetEvents, this.lastOnUpdate, this.lastOnProfiles);
   }
 
   flushPending(getEvents: () => NostrEvent[], onUpdate: (events: NostrEvent[]) => void) {
