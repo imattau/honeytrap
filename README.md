@@ -2,13 +2,15 @@
 
 ![Honeytrap](/public/assets/honeytrap_header_960.png)
 
-A premium, dual‑axis Nostr PWA: vertical depth per post, horizontal‑style navigation concepts reimagined as a fast, virtualized feed, with optional WebTorrent assist for media/event redundancy.
+Honeytrap is a premium Nostr PWA focused on deep reading and clean navigation. The main feed is a fast, vertical, virtualized stream. Tapping a post opens a dedicated thread view (root‑to‑reply stack), and tapping an author opens an author view (profile + author feed). Optional WebTorrent assist adds redundancy for media/event packages with HTTP fallback.
 
 ## Highlights
-- **Dual‑axis reading**: a single post is a deep scroll (replies/long‑form) while the feed remains snap‑smooth and virtualized.
-- **Signal‑like UI**: high contrast cards, minimal chrome, icon‑forward controls.
-- **PWA‑first**: installable, fast, offline‑tolerant caching.
-- **Optional P2P assist**: WebTorrent for media/event packages with HTTP fallback and SHA‑256 verification.
+- **Vertical, virtualized feed** with manual refresh and pull‑to‑refresh on touch.
+- **Thread view** that expands a post into a root‑to‑reply stack (no truncation, actions, reply composer).
+- **Author view** with full profile header and author‑only feed.
+- **Transport status icons** per post (Relay / P2P / HTTP / Verified).
+- **Safety controls**: NSFW blurring + per‑author NSFW override, follow/block controls.
+- **Optional P2P assist**: WebTorrent media/event support with SHA‑256 verification.
 
 ## Run
 ```bash
@@ -23,18 +25,25 @@ npm run preview
 ```
 
 ## Core Navigation
-- **Feed**: virtualized and manually updated (no auto‑scroll). Pull‑to‑refresh on touch.
-- **Thread view**: dedicated route with root‑to‑reply stack, actions at top.
-- **Author view**: profile + author‑only feed.
+- **Feed**: vertical, manual only (no auto‑scroll). Pull‑to‑refresh loads pending items on touch devices.
+- **Thread view**: `/thread/:id` shows the root‑to‑reply stack and actions.
+- **Author view**: `/author/:pubkey` shows profile + author feed.
 
-## Nostr Support (v0)
+## Login & Identity
+- **NIP‑07** browser extension
+- **NIP‑46** bunker / nostrconnect (QR supported)
+- **Nsec paste** (unsafe, stored locally)
+
+## Nostr Support (current)
 - **Notes**: kind `1`
-- **Long‑form**: kind `30023`
-- **Lists**: NIP‑51 lists + tracklists
-- **Zaps**: NIP‑57 requests + NWC payment
-- **Relay list**: reads NIP‑65 (kind `10002`) for logged‑in users
+- **Long‑form**: kind `30023` (title + summary in feed, no truncation in thread)
+- **Zaps**: NIP‑57 request + NWC payment flow
+- **Relay list**: NIP‑65 (kind `10002`) used when available
+- **nostr: links**: `npub/nprofile` rendered as chips; `nevent/note` rendered as nested cards when available
 
 ## Media + P2P Assist
+Honeytrap can prefer WebTorrent for media/event packages, with strict verification and HTTP fallback.
+
 - **Media tags**
   - `['bt', '<magnet-uri>', 'media', 'url=<http-url>']`
   - `['x', 'sha256:<hex>', 'url=<http-url>']`
@@ -45,17 +54,17 @@ npm run preview
 ### Canonical event bytes
 `canonicaliseEvent(event)` outputs deterministic UTF‑8 bytes (stable key order, no whitespace) for SHA‑256 validation.
 
-## Privacy & Safety
-- **P2P is additive**: relays stay canonical.
-- **Scope**: follows‑only by default; can be widened.
-- **NSFW blurring**: tags or manual author override hide sensitive content.
+## Settings & Controls
+- **Nostr relays** (NIP‑65 aware + live status)
+- **Media relays** (Blossom defaults)
+- **BitTorrent assist** (scope, trackers, concurrency)
+- **Wallet** (NWC URI + zap presets)
+- **Feed filter** (Follows / Following / Both / All)
 
-## Settings
-- Relays (NIP‑65 aware)
-- Media relays (Blossom defaults)
-- BitTorrent assist (scope, trackers, concurrency)
-- Wallet (NWC + zap presets)
-- Feed filter (Follows / Following / Both / All)
+## UI Notes
+- **Main feed cards** show author + content + first media/link only. Use **More** to open the thread view.
+- **NSFW blur** is driven by tags and can be overridden per author.
+- **Follow/Block** actions are available on each card and on author pages.
 
 ## Structure
 - `src/nostr/` – Nostr protocol/services (OO)
@@ -65,5 +74,6 @@ npm run preview
 
 ## Known Limitations
 - No DMs
-- Zaps are best‑effort (dependent on LNURL/NWC endpoints)
-- Event‑package assist is opportunistic
+- Reposts/likes/share are UI only (not wired)
+- Author lists/tracklists are not exposed in the UI yet
+- Event‑package assist is opportunistic and never a source of truth
