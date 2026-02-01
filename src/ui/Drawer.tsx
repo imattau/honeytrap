@@ -42,6 +42,7 @@ export function Drawer() {
   const [isTouch, setIsTouch] = useState(false);
   const [menuState, setMenuState] = useState(() => buildMenuState(settings, relayList, mediaRelayList));
   const [relaysOpen, setRelaysOpen] = useState(false);
+  const [touchStart, setTouchStart] = useState<number | null>(null);
   const fallbackAvatar = '/assets/honeytrap_logo_256.png';
   const headerImage = '/assets/honeytrap_header_960.png';
 
@@ -100,6 +101,15 @@ export function Drawer() {
     try {
       const pubkey = await connectNip46(bunkerInput.trim(), (authUrl) => {
         setConnectStatus(`Approve in bunker: ${authUrl}`);
+        if (isTouch) {
+          try {
+            window.location.href = authUrl;
+          } catch {
+            // ignore
+          }
+        } else {
+          setBunkerQr(authUrl);
+        }
       });
       setConnectStatus(`Connected as ${pubkey.slice(0, 10)}…`);
     } catch (error) {
@@ -109,6 +119,16 @@ export function Drawer() {
 
   const handleBunkerQr = () => {
     setBunkerQr(bunkerInput.trim());
+  };
+
+  const handleSignerApp = () => {
+    const target = bunkerInput.trim();
+    if (!target) return;
+    try {
+      window.location.href = target;
+    } catch {
+      // ignore
+    }
   };
 
   const handleSignOut = async () => {
@@ -146,7 +166,19 @@ export function Drawer() {
         </button>
       )}
       {open && !isWide && <div className="drawer-backdrop" onClick={() => setOpen(false)} />}
-      <div className={`top-drawer ${open ? 'open' : ''}`}>
+      <div
+        className={`top-drawer ${open ? 'open' : ''}`}
+        onTouchStart={(event) => {
+          if (isWide) return;
+          setTouchStart(event.touches[0]?.clientY ?? null);
+        }}
+        onTouchEnd={(event) => {
+          if (isWide || touchStart === null) return;
+          const endY = event.changedTouches[0]?.clientY ?? touchStart;
+          if (touchStart - endY > 60) setOpen(false);
+          setTouchStart(null);
+        }}
+      >
         {!isWide && (
           <button className="drawer-close" onClick={() => setOpen(false)} aria-label="Close menu">
             <X size={18} />
@@ -176,6 +208,11 @@ export function Drawer() {
                 <button className="menu-button" onClick={handleBunkerQr}>
                   Show QR
                 </button>
+                {isTouch && (
+                  <button className="menu-button" onClick={handleSignerApp}>
+                    Open Signer App
+                  </button>
+                )}
               </div>
               {connectStatus && <div className="menu-sub">{connectStatus}</div>}
               {bunkerQr && (
