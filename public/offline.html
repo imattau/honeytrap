@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Honeytrap — Offline</title>
+    <style>
+      html, body {
+        margin: 0;
+        height: 100%;
+        background: #0b0d10;
+        color: #e5edf7;
+        font-family: "Sora", system-ui, sans-serif;
+      }
+      .wrap {
+        min-height: 100%;
+        display: grid;
+        place-items: center;
+        padding: 24px;
+        text-align: center;
+      }
+      .card {
+        max-width: 520px;
+        border: 1px solid #1b222c;
+        border-radius: 20px;
+        padding: 24px;
+        background: rgba(10, 16, 24, 0.9);
+        box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
+      }
+      h1 { margin: 0 0 8px; font-size: 20px; }
+      p { margin: 0; color: #9aa9bf; line-height: 1.5; }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="card">
+        <h1>You're offline</h1>
+        <p>Honeytrap can't reach relays right now. Check your connection and try again.</p>
+      </div>
+    </div>
+  </body>
+</html>
