@@ -15,12 +15,14 @@ export function TorrentSection({ value, onChange, onSave, saved }: TorrentSectio
   const { torrents, canEncryptNip44, reseedTorrent } = useAppState();
   const [showAll, setShowAll] = React.useState(false);
   const [reseeding, setReseeding] = React.useState<Record<string, boolean>>({});
-  const activeTorrents = useMemo(() => {
-    return Object.values(torrents)
-      .filter((item) => showAll || item.active)
-      .sort((a, b) => b.updatedAt - a.updatedAt)
-      .slice(0, showAll ? 40 : 6);
-  }, [torrents, showAll]);
+  const reseedDisabled = !value.enabled;
+  const { activeTorrents, inactiveTorrents } = useMemo(() => {
+    const items = Object.values(torrents).sort((a, b) => b.updatedAt - a.updatedAt);
+    return {
+      activeTorrents: items.filter((item) => item.active).slice(0, 6),
+      inactiveTorrents: items.filter((item) => !item.active).slice(0, 40)
+    };
+  }, [torrents]);
 
   return (
     <MenuSection title="BitTorrent Assist" icon={<Bolt size={16} />}>
@@ -107,12 +109,12 @@ export function TorrentSection({ value, onChange, onSave, saved }: TorrentSectio
           Encrypted torrent list is best-effort. Remote signer support is planned.
         </div>
       )}
-      {activeTorrents.length > 0 && (
+      {(activeTorrents.length > 0 || inactiveTorrents.length > 0) && (
         <div className="torrent-list">
           <div className="menu-row">
             <span className="menu-label">Torrents</span>
             <button className="menu-pill" onClick={() => setShowAll((prev) => !prev)}>
-              {showAll ? 'Show active' : 'Show all'}
+              {showAll ? 'Hide history' : 'Show history'}
             </button>
           </div>
           <div className="torrent-list-items">
@@ -125,23 +127,34 @@ export function TorrentSection({ value, onChange, onSave, saved }: TorrentSectio
                 <div className="torrent-meta">
                   <span>{Math.round(item.progress * 100)}%</span>
                   <span>{item.peers} peers</span>
-                  {!item.active && (
-                    <button
-                      className={`torrent-reseed ${reseeding[item.magnet] ? 'active' : ''}`}
-                      onClick={() => {
-                        setReseeding((prev) => ({ ...prev, [item.magnet]: true }));
-                        try {
-                          reseedTorrent(item.magnet);
-                        } finally {
-                          window.setTimeout(() => {
-                            setReseeding((prev) => ({ ...prev, [item.magnet]: false }));
-                          }, 1200);
-                        }
-                      }}
-                    >
-                      {reseeding[item.magnet] ? 'Reseeding…' : 'Reseed'}
-                    </button>
-                  )}
+                </div>
+              </div>
+            ))}
+            {showAll && inactiveTorrents.map((item) => (
+              <div className="torrent-item inactive" key={item.magnet}>
+                <div className="torrent-item-row">
+                  <span className={`torrent-chip ${item.mode}`}>{item.mode}</span>
+                  <span className="torrent-name">{item.name ?? item.url ?? 'torrent'}</span>
+                </div>
+                <div className="torrent-meta">
+                  <span>{Math.round(item.progress * 100)}%</span>
+                  <span>{item.peers} peers</span>
+                  <button
+                    className={`torrent-reseed ${reseeding[item.magnet] ? 'active' : ''}`}
+                    disabled={reseedDisabled}
+                    onClick={() => {
+                      setReseeding((prev) => ({ ...prev, [item.magnet]: true }));
+                      try {
+                        reseedTorrent(item.magnet);
+                      } finally {
+                        window.setTimeout(() => {
+                          setReseeding((prev) => ({ ...prev, [item.magnet]: false }));
+                        }, 1200);
+                      }
+                    }}
+                  >
+                    {reseedDisabled ? 'Enable P2P' : reseeding[item.magnet] ? 'Reseeding…' : 'Reseed'}
+                  </button>
                 </div>
               </div>
             ))}

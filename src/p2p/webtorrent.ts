@@ -26,6 +26,7 @@ export class WebTorrentAssist {
   }
 
   async fetchWithAssist(source: AssistSource, timeoutMs: number, allowP2P: boolean): Promise<AssistResult> {
+    const isHttp = source.url.startsWith('http://') || source.url.startsWith('https://');
     if (allowP2P && source.magnet && this.hub?.getClient() && this.active < this.settings.maxConcurrent) {
       try {
         const result = await this.fetchViaTorrent(source, timeoutMs);
@@ -34,7 +35,7 @@ export class WebTorrentAssist {
         // fall back to HTTP
       }
     }
-    if (!source.url) throw new Error('No HTTP fallback available');
+    if (!isHttp) throw new Error('No HTTP fallback available');
     const response = await fetch(source.url);
     const data = await response.arrayBuffer();
     const verified = await verifySha256(data, source.sha256);

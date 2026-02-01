@@ -27,7 +27,10 @@ export class MediaAssist implements MediaAssistApi {
     const key = cacheKey(source);
     const cached = this.cache.get(key);
     if (cached) return cached;
-    const task = this.fetch(source, allowP2P, timeoutMs);
+    const task = this.fetch(source, allowP2P, timeoutMs).catch((err) => {
+      this.cache.delete(key);
+      throw err;
+    });
     this.cache.set(key, task);
     return task;
   }

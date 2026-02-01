@@ -5,9 +5,11 @@ import type { P2PSettings } from '../storage/types';
 export class WebTorrentHub {
   private client?: WebTorrent;
   private settings: P2PSettings;
+  private trackerKey: string;
 
   constructor(settings: P2PSettings) {
     this.settings = settings;
+    this.trackerKey = serializeTrackers(settings.trackers);
     if (settings.enabled) {
       this.client = this.createClient(settings);
     }
@@ -15,16 +17,22 @@ export class WebTorrentHub {
 
   updateSettings(settings: P2PSettings) {
     this.settings = settings;
+    const nextTrackerKey = serializeTrackers(settings.trackers);
     if (!settings.enabled) {
       this.client?.destroy();
       this.client = undefined;
+      this.trackerKey = nextTrackerKey;
       return;
     }
     if (!this.client) {
       this.client = this.createClient(settings);
+      this.trackerKey = nextTrackerKey;
       return;
     }
-    this.client = this.createClient(settings, this.client);
+    if (nextTrackerKey !== this.trackerKey) {
+      this.client = this.createClient(settings, this.client);
+      this.trackerKey = nextTrackerKey;
+    }
   }
 
   getClient(): WebTorrent | undefined {
@@ -53,4 +61,8 @@ export class WebTorrentHub {
       }
     });
   }
+}
+
+function serializeTrackers(trackers: string[]) {
+  return trackers.map((item) => item.trim()).filter(Boolean).sort().join('|');
 }

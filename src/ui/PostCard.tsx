@@ -311,7 +311,7 @@ function renderTextWithBreaks(text: string, onTagClick: (tag: string) => void) {
 }
 
 function renderLineWithHashtags(line: string, onTagClick: (tag: string) => void) {
-  const regex = /(^|\\s)#([a-zA-Z0-9_]+)/g;
+  const regex = /(^|\s)#([a-zA-Z0-9_]+)/g;
   const parts: React.ReactNode[] = [];
   let lastIndex = 0;
   let match: RegExpExecArray | null;

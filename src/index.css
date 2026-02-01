@@ -932,6 +932,10 @@ body {
   background: rgba(8, 12, 18, 0.55);
 }
 
+.torrent-item.inactive {
+  opacity: 0.75;
+}
+
 .torrent-item-row {
   display: flex;
   align-items: center;
@@ -985,6 +989,11 @@ body {
   padding: 2px 8px;
   font-size: 10px;
   transition: 0.2s ease;
+}
+
+.torrent-reseed:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .torrent-reseed.active {

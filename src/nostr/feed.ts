@@ -71,10 +71,24 @@ export class FeedOrchestrator implements FeedOrchestratorApi {
     this.lastGetEvents = getEvents;
     this.lastOnUpdate = onUpdate;
     this.lastOnProfiles = onProfiles;
+    const authors = resolveAuthors({ follows, followers, feedMode, listId, lists });
+    const authorSet = authors && authors.length > 0 ? new Set(authors) : undefined;
+    const normalizedTags = normalizeTags(tags);
+    const requiresAuthorFilter = feedMode !== 'all' || Boolean(listId);
+    if (requiresAuthorFilter && (!authors || authors.length === 0)) {
+      onUpdate([]);
+      onPending?.(0);
+      return;
+    }
     this.cache?.getRecentEvents()
       .then((cached) => {
         if (!cached || cached.length === 0) return;
-        const filtered = cached.filter((event) => !this.isBlocked?.(event.pubkey));
+        const filtered = cached.filter((event) => {
+          if (this.isBlocked?.(event.pubkey)) return false;
+          if (authorSet && !authorSet.has(event.pubkey)) return false;
+          if (normalizedTags.length > 0 && !matchesTag(event, normalizedTags)) return false;
+          return true;
+        });
         if (filtered.length === 0) return;
         filtered.forEach((event) => this.knownIds.add(event.id));
         const merged = this.mergeEvents(getEvents(), filtered);
@@ -83,7 +97,7 @@ export class FeedOrchestrator implements FeedOrchestratorApi {
       .catch(() => null);
 
     this.service.subscribeTimeline({
-      authors: resolveAuthors({ follows, followers, feedMode, listId, lists }),
+      authors,
       tags,
       onEvent: (event) => {
         if (this.isBlocked?.(event.pubkey)) return;
@@ -223,4 +237,16 @@ function resolveAuthors({
   if (feedMode === 'follows') return follows;
   if (feedMode === 'both') return Array.from(new Set([...follows, ...followers]));
   return undefined;
+}
+
+function normalizeTags(tags?: string[]) {
+  return (tags ?? [])
+    .map((tag) => tag.trim().replace(/^#/, '').toLowerCase())
+    .filter(Boolean);
+}
+
+function matchesTag(event: NostrEvent, tags: string[]) {
+  if (tags.length === 0) return true;
+  const tagSet = new Set(tags);
+  return event.tags.some((tag) => tag[0] === 't' && tag[1] && tagSet.has(tag[1].toLowerCase()));
 }
