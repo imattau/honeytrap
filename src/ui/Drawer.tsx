@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { KeyRound, QrCode, ShieldAlert, UserCircle, X } from 'lucide-react';
+import { KeyRound, LogOut, QrCode, ShieldAlert, UserCircle, X } from 'lucide-react';
 import { QRCodeCanvas } from 'qrcode.react';
 import { useAppState } from './AppState';
 import { createNostrConnectRequest, decodeKey } from '../nostr/auth';
@@ -8,7 +8,6 @@ import { MediaRelaysSection } from './menu/MediaRelaysSection';
 import { NostrRelaysSection } from './menu/NostrRelaysSection';
 import { TorrentSection } from './menu/TorrentSection';
 import { WalletSection } from './menu/WalletSection';
-import { SignOutSection } from './menu/SignOutSection';
 import { MenuSection } from './menu/MenuSection';
 import { MenuPill } from './menu/MenuPill';
 import { useNavigate } from 'react-router-dom';
@@ -405,7 +404,9 @@ export function Drawer() {
               onSave={handleSaveWallet}
               saved={savedSection === 'wallet'}
             />
-            <SignOutSection onSignOut={handleSignOut} />
+            <button className="menu-button danger" onClick={handleSignOut}>
+              <LogOut size={14} /> Sign out
+            </button>
           </div>
         )}
       </div>

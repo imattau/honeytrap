@@ -34,8 +34,13 @@ export function ThreadStack() {
   const [zapProfile, setZapProfile] = useState<ProfileMetadata | undefined>(undefined);
 
   useEffect(() => {
-    if (!id) return;
+    if (!id) {
+      setNodes([]);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
+    setNodes([]);
     const stateEvent = (location.state as { event?: NostrEvent } | undefined)?.event;
     const cached = findEventById(id);
     const fallback = stateEvent ?? cached;
@@ -49,6 +54,7 @@ export function ThreadStack() {
           setNodes(loaded);
           return;
         }
+        setNodes(fallback ? [{ event: fallback, depth: 0, role: 'target' }] : []);
         setLoading(false);
       })
       .catch(() => {
@@ -95,7 +101,7 @@ export function ThreadStack() {
         overscan={600}
         components={{
           EmptyPlaceholder: () => (
-            <div className="thread-empty">Loading thread…</div>
+            <div className="thread-empty">{loading ? 'Loading thread…' : 'Thread unavailable.'}</div>
           )
         }}
         itemContent={(_, node) => (

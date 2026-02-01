@@ -50,18 +50,38 @@ export function AuthorView() {
   }, [events]);
 
   useEffect(() => {
-    if (!resolvedPubkey) return;
+    if (!resolvedPubkey) {
+      setEvents([]);
+      setProfile(undefined);
+      setLoading(false);
+      return;
+    }
+    setEvents([]);
+    setProfile(undefined);
+    setLoading(true);
+    let active = true;
     authorService.subscribeAuthorFeed(
       resolvedPubkey,
       () => eventsRef.current,
       (next) => {
+        if (!active) return;
         setEvents(next);
         if (next.length > 0) setLoading(false);
       },
       () => null
     );
-    authorService.loadProfile(resolvedPubkey).then(setProfile).catch(() => null);
+    authorService.loadProfile(resolvedPubkey)
+      .then((loaded) => {
+        if (!active) return;
+        setProfile(loaded);
+      })
+      .catch(() => null)
+      .finally(() => {
+        if (!active) return;
+        setLoading(false);
+      });
     return () => {
+      active = false;
       authorService.stop();
       setEvents([]);
       setLoading(true);

@@ -155,8 +155,9 @@ function Feed() {
 }
 
 function AppRoutes() {
+  const location = useLocation();
   return (
-    <Routes>
+    <Routes location={location} key={location.pathname}>
       <Route path="/" element={<Feed />} />
       <Route path="/thread/:id" element={<ThreadStack />} />
       <Route path="/author/:pubkey" element={<AuthorView />} />
