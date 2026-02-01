@@ -35,6 +35,30 @@ body {
   overscroll-behavior: contain;
 }
 
+.progress-line {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  transform: scaleX(0);
+  transform-origin: left;
+  background: linear-gradient(90deg, rgba(109, 214, 255, 0.0), rgba(109, 214, 255, 0.9), rgba(109, 214, 255, 0.0));
+  opacity: 0;
+  transition: opacity 160ms ease, transform 160ms ease;
+  z-index: 5;
+}
+
+.progress-line.active {
+  opacity: 1;
+  transform: scaleX(1);
+  animation: feed-progress 1.2s ease-in-out infinite;
+}
+
+.progress-line.pulse {
+  animation: feed-progress 0.9s ease-in-out infinite;
+}
+
 .feed-pull {
   position: absolute;
   top: 0;
@@ -326,6 +350,12 @@ body {
 @keyframes shimmer {
   0% { background-position: 0% 0%; }
   100% { background-position: 200% 0%; }
+}
+
+@keyframes feed-progress {
+  0% { opacity: 0.35; }
+  50% { opacity: 1; }
+  100% { opacity: 0.35; }
 }
 
 .nostr-chip {
@@ -792,6 +822,7 @@ body {
 .thread-stack {
   height: 100vh;
   padding: 80px 16px 24px;
+  position: relative;
 }
 
 .thread-virtuoso {
@@ -814,6 +845,7 @@ body {
   height: 100%;
   display: grid;
   grid-template-rows: auto 1fr;
+  position: relative;
 }
 
 .author-header {

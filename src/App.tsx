@@ -10,7 +10,7 @@ import { AuthorView } from './ui/AuthorView';
 const FEED_SCROLL_KEY = 'honeytrap:feed-scroll-top';
 
 function Feed() {
-  const { events, profiles, selectEvent, loadOlder, flushPending } = useAppState();
+  const { events, profiles, selectEvent, loadOlder, flushPending, feedLoading, pendingCount } = useAppState();
   const navigate = useNavigate();
   const location = useLocation();
   const virtuosoRef = useRef<VirtuosoHandle | null>(null);
@@ -62,6 +62,10 @@ function Feed() {
         setPullReady(false);
       }}
     >
+      <div
+        className={`progress-line ${feedLoading || pendingCount > 0 ? 'active' : ''} ${pendingCount > 0 ? 'pulse' : ''}`}
+        aria-hidden="true"
+      />
       <div className={`feed-pull ${pullReady ? 'ready' : ''}`} style={{ height: pullDistance }}>
         <span>{pullReady ? 'Release to load new posts' : 'Pull to refresh'}</span>
       </div>

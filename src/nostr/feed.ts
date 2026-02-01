@@ -58,7 +58,8 @@ export class FeedOrchestrator implements FeedOrchestratorApi {
     }: { follows: string[]; followers: string[]; feedMode: 'all' | 'follows' | 'followers' | 'both'; listId?: string; lists?: ListDescriptor[] },
     getEvents: () => NostrEvent[],
     onUpdate: (events: NostrEvent[]) => void,
-    onProfiles: (profiles: Record<string, ProfileMetadata>) => void
+    onProfiles: (profiles: Record<string, ProfileMetadata>) => void,
+    onPending?: (count: number) => void
   ) {
     this.hydrated = false;
     this.pending = [];
@@ -74,8 +75,10 @@ export class FeedOrchestrator implements FeedOrchestratorApi {
         this.knownIds.add(event.id);
         this.transport?.mark(event.id, { relay: true, verified: verifyEvent(event as any) });
         this.pending.push(event);
+        onPending?.(this.pending.length);
         if (this.pending.length > MAX_BUFFER) {
           this.pending.length = MAX_BUFFER;
+          onPending?.(this.pending.length);
           if (!this.pausedByBuffer) {
             this.pausedByBuffer = true;
             this.service.stop();
@@ -90,6 +93,7 @@ export class FeedOrchestrator implements FeedOrchestratorApi {
           const merged = this.flush(getEvents());
           onUpdate(merged);
         }
+        onPending?.(this.pending.length);
         this.drainProfiles(onProfiles);
       }
     });
@@ -110,6 +114,7 @@ export class FeedOrchestrator implements FeedOrchestratorApi {
     if (this.pending.length === 0) return;
     const merged = this.flush(getEvents());
     onUpdate(merged);
+    // pending count becomes zero after flush
     this.resumeIfBuffered();
   }
 

@@ -15,6 +15,7 @@ export function ThreadStack() {
   const navigate = useNavigate();
   const { profiles, selectEvent, loadThread, publishReply, sendZap, settings, findEventById } = useAppState();
   const [nodes, setNodes] = useState<ThreadNode[]>([]);
+  const [loading, setLoading] = useState(true);
   const [touchStart, setTouchStart] = useState<number | null>(null);
   const [composerOpen, setComposerOpen] = useState(false);
   const [replyTarget, setReplyTarget] = useState<NostrEvent | undefined>(undefined);
@@ -24,6 +25,7 @@ export function ThreadStack() {
 
   useEffect(() => {
     if (!id) return;
+    setLoading(true);
     const stateEvent = (location.state as { event?: NostrEvent } | undefined)?.event;
     const cached = findEventById(id);
     loadThread(id)
@@ -33,11 +35,17 @@ export function ThreadStack() {
           return;
         }
         const fallback = stateEvent ?? cached;
-        if (fallback) setNodes([{ event: fallback, depth: 0, role: 'target' }]);
+        if (fallback) {
+          setNodes([{ event: fallback, depth: 0, role: 'target' }]);
+        }
+        setLoading(false);
       })
       .catch(() => {
         const fallback = stateEvent ?? cached;
-        if (fallback) setNodes([{ event: fallback, depth: 0, role: 'target' }]);
+        if (fallback) {
+          setNodes([{ event: fallback, depth: 0, role: 'target' }]);
+        }
+        setLoading(false);
       });
   }, [id, loadThread, location.state, findEventById]);
 
@@ -67,6 +75,7 @@ export function ThreadStack() {
 
   return (
     <div className="thread-stack" onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
+      <div className={`progress-line ${loading ? 'active' : ''}`} aria-hidden="true" />
       {!isTouch && (
         <button className="thread-close" onClick={() => navigate('/')}
           aria-label="Close thread">

@@ -58,6 +58,7 @@ export function AuthorView() {
 
   return (
     <div className="author-view">
+      <div className={`progress-line ${loading ? 'active' : ''}`} aria-hidden="true" />
       <div className="author-header">
         <button className="author-back" onClick={() => navigate(-1)} aria-label="Back">
           <ArrowLeft size={18} />

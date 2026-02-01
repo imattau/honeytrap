@@ -28,6 +28,8 @@ interface AppStateValue {
   relayList: string[];
   relayStatus: Record<string, boolean>;
   refreshRelayStatus: () => void;
+  feedLoading: boolean;
+  pendingCount: number;
   selectedEvent?: NostrEvent;
   selectedAuthor?: string;
   keys?: KeyRecord;
@@ -79,6 +81,8 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   const [followers, setFollowers] = useState<string[]>([]);
   const [relayList, setRelayList] = useState<string[]>([]);
   const [relayStatus, setRelayStatus] = useState<Record<string, boolean>>({});
+  const [feedLoading, setFeedLoading] = useState(false);
+  const [pendingCount, setPendingCount] = useState(0);
   const [selectedEvent, setSelectedEvent] = useState<NostrEvent | undefined>(undefined);
   const [selectedAuthor, setSelectedAuthor] = useState<string | undefined>(undefined);
   const [keys, setKeys] = useState<KeyRecord | undefined>(undefined);
@@ -232,6 +236,12 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   }, [paused, orchestrator]);
 
   const eventsRef = useRef<NostrEvent[]>([]);
+  const feedLoadingRef = useRef(false);
+
+  const setFeedLoadingSafe = useCallback((value: boolean) => {
+    feedLoadingRef.current = value;
+    setFeedLoading(value);
+  }, []);
 
   useEffect(() => {
     eventsRef.current = events;
@@ -240,13 +250,19 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   const subscribeFeed = useCallback(() => {
     orchestrator.reset();
     setEvents([]);
+    setPendingCount(0);
+    setFeedLoadingSafe(true);
     orchestrator.subscribe(
       { follows: settings.follows, followers, feedMode: settings.feedMode, listId: settings.selectedListId },
       () => eventsRef.current,
-      setEvents,
-      setProfiles
+      (next) => {
+        setEvents(next);
+        if (feedLoadingRef.current) setFeedLoadingSafe(false);
+      },
+      setProfiles,
+      setPendingCount
     );
-  }, [orchestrator, settings.follows, settings.selectedListId, settings.feedMode, followers]);
+  }, [orchestrator, settings.follows, settings.selectedListId, settings.feedMode, followers, setFeedLoadingSafe]);
 
   useEffect(() => {
     orchestrator.stop();
@@ -294,15 +310,21 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   };
 
   const loadOlder = useCallback(async () => {
-    await orchestrator.loadOlder(
-      { follows: settings.follows, followers, feedMode: settings.feedMode, listId: settings.selectedListId },
-      () => eventsRef.current,
-      setEvents
-    );
-  }, [orchestrator, settings.follows, settings.selectedListId, settings.feedMode, followers]);
+    setFeedLoadingSafe(true);
+    try {
+      await orchestrator.loadOlder(
+        { follows: settings.follows, followers, feedMode: settings.feedMode, listId: settings.selectedListId },
+        () => eventsRef.current,
+        setEvents
+      );
+    } finally {
+      setFeedLoadingSafe(false);
+    }
+  }, [orchestrator, settings.follows, settings.selectedListId, settings.feedMode, followers, setFeedLoadingSafe]);
 
   const flushPending = useCallback(() => {
     orchestrator.flushPending(() => eventsRef.current, setEvents);
+    setPendingCount(0);
   }, [orchestrator]);
 
   const isFollowed = useCallback((pubkey: string) => {
@@ -394,6 +416,8 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
         relayList,
         relayStatus,
         refreshRelayStatus,
+        feedLoading,
+        pendingCount,
         selectedEvent,
         selectedAuthor,
         keys,
