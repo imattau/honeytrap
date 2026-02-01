@@ -2,11 +2,11 @@
 
 ![Honeytrap](/public/assets/honeytrap_header_960.png)
 
-Honeytrap is a premium Nostr PWA focused on deep reading and clean navigation. The main feed is a fast, vertical, virtualized stream. Tapping a post opens a dedicated thread view (root‑to‑reply stack), and tapping an author opens an author view (profile + author feed). Optional WebTorrent assist adds redundancy for media/event packages with HTTP fallback.
+Honeytrap is a premium Nostr PWA focused on deep reading and clean navigation. The main feed is a fast, vertical, virtualized stream. A post expands into a dedicated thread view (root‑to‑reply stack), and an author opens an author view (profile + author feed). Optional WebTorrent assist adds redundancy for media/event packages with HTTP fallback.
 
 ## Highlights
 - **Vertical, virtualized feed** with manual refresh and pull‑to‑refresh on touch.
-- **Thread view** that expands a post into a root‑to‑reply stack (no truncation, actions, reply composer).
+- **Thread view** that presents a root‑to‑reply stack (no truncation, actions, reply composer).
 - **Author view** with full profile header and author‑only feed.
 - **Transport status icons** per post (Relay / P2P / HTTP / Verified).
 - **Safety controls**: NSFW blurring + per‑author NSFW override, follow/block controls.
@@ -24,8 +24,8 @@ npm run build
 npm run preview
 ```
 
-## Core Navigation
-- **Feed**: vertical, manual only (no auto‑scroll). Pull‑to‑refresh loads pending items on touch devices.
+## Navigation
+- **Feed**: vertical and manual only (no auto‑scroll). Pull‑to‑refresh loads pending items on touch devices.
 - **Thread view**: `/thread/:id` shows the root‑to‑reply stack and actions.
 - **Author view**: `/author/:pubkey` shows profile + author feed.
 
@@ -62,7 +62,7 @@ Honeytrap can prefer WebTorrent for media/event packages, with strict verificati
 - **Feed filter** (Follows / Following / Both / All)
 
 ## UI Notes
-- **Main feed cards** show author + content + first media/link only. Use **More** to open the thread view.
+- **Main feed cards** show author + content + first media/link only. **More** opens the thread view.
 - **NSFW blur** is driven by tags and can be overridden per author.
 - **Follow/Block** actions are available on each card and on author pages.
 
