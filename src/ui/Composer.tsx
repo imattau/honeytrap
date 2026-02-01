@@ -122,7 +122,10 @@ export function Composer({ open, replyTo, onClose, onSubmit, mediaRelays = [], o
               <select
                 className="composer-select"
                 value={selectedRelay}
-                onChange={(event) => setSelectedRelay(event.target.value)}
+                onChange={(event) => {
+                  setSelectedRelay(event.target.value);
+                  if (error) setError(null);
+                }}
               >
                 {onAttachMedia && <option value="__p2p__">P2P only (seed locally)</option>}
                 {mediaRelays.length === 0 && <option value="">No media relays</option>}
