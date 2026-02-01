@@ -114,11 +114,14 @@ export function useFeedState({
   useEffect(() => {
     orchestrator.stop();
     subscribeFeed();
+    return () => orchestrator.stop();
+  }, [subscribeFeed, orchestrator, feedService]);
+
+  useEffect(() => {
     return () => {
-      orchestrator.stop();
       feedService.destroy();
     };
-  }, [subscribeFeed, orchestrator, feedService]);
+  }, [feedService]);
 
   const loadOlder = useCallback(async () => {
     setFeedLoadingSafe(true);
@@ -164,8 +167,8 @@ export function useFeedState({
   }, [paused, orchestrator]);
 
   const findEventById = useCallback(
-    (id: string) => events.find((event) => event.id === id),
-    [events]
+    (id: string) => eventsRef.current.find((event) => event.id === id),
+    []
   );
 
   return {

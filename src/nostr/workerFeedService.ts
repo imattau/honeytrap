@@ -19,6 +19,9 @@ export class WorkerFeedService implements FeedServiceApi {
   private state?: SubscriptionState;
   private backoffMs = 600;
   private retryTimer?: ReturnType<typeof setTimeout>;
+  private deliveryTimer?: ReturnType<typeof setTimeout>;
+  private deliveryQueue: NostrEvent[] = [];
+  private delivering = false;
   private active = false;
 
   constructor(nostr: NostrClient) {
@@ -61,6 +64,10 @@ export class WorkerFeedService implements FeedServiceApi {
     this.active = false;
     if (this.retryTimer) globalThis.clearTimeout(this.retryTimer);
     this.retryTimer = undefined;
+    if (this.deliveryTimer) globalThis.clearTimeout(this.deliveryTimer);
+    this.deliveryTimer = undefined;
+    this.deliveryQueue = [];
+    this.delivering = false;
     if (!this.worker) {
       this.fallback.stop();
       return;
@@ -82,11 +89,11 @@ export class WorkerFeedService implements FeedServiceApi {
   private handleMessage(message: FeedWorkerResponse) {
     if (!this.reqId || !this.state || message.reqId !== this.reqId) return;
     if (message.type === 'event') {
-      this.state.onEvent(message.event);
+      this.enqueueEvents([message.event]);
       return;
     }
     if (message.type === 'event-batch') {
-      message.events.forEach((event) => this.state?.onEvent(event));
+      this.enqueueEvents(message.events);
       return;
     }
     if (message.type === 'close') {
@@ -112,6 +119,36 @@ export class WorkerFeedService implements FeedServiceApi {
 
   private post(message: FeedWorkerRequest) {
     this.worker?.postMessage(message);
+  }
+
+  private enqueueEvents(events: NostrEvent[]) {
+    if (!this.active || !this.state) return;
+    this.deliveryQueue.push(...events);
+    if (this.delivering) return;
+    this.delivering = true;
+    this.deliveryTimer = globalThis.setTimeout(() => this.flushEvents(), 0);
+  }
+
+  private flushEvents() {
+    this.deliveryTimer = undefined;
+    if (!this.active || !this.state) {
+      this.deliveryQueue = [];
+      this.delivering = false;
+      return;
+    }
+    const start = Date.now();
+    let processed = 0;
+    while (this.deliveryQueue.length > 0 && processed < 80 && (Date.now() - start) < 8) {
+      const event = this.deliveryQueue.shift();
+      if (!event) break;
+      this.state.onEvent(event);
+      processed += 1;
+    }
+    if (this.deliveryQueue.length > 0) {
+      this.deliveryTimer = globalThis.setTimeout(() => this.flushEvents(), 0);
+      return;
+    }
+    this.delivering = false;
   }
 }
 

@@ -44,6 +44,7 @@ describe('WorkerFeedService', () => {
   });
 
   it('subscribes via worker and forwards events', () => {
+    vi.useFakeTimers();
     const service = new WorkerFeedService({} as any);
     const onEvent = vi.fn();
 
@@ -60,12 +61,15 @@ describe('WorkerFeedService', () => {
       reqId: subscribe.reqId,
       event: makeEvent('e1')
     });
+    vi.runAllTimers();
 
     expect(onEvent).toHaveBeenCalledTimes(1);
     expect(onEvent).toHaveBeenCalledWith(expect.objectContaining({ id: 'e1' }));
+    vi.useRealTimers();
   });
 
   it('forwards batched worker events', () => {
+    vi.useFakeTimers();
     const service = new WorkerFeedService({} as any);
     const onEvent = vi.fn();
     service.subscribeTimeline({ onEvent });
@@ -75,7 +79,9 @@ describe('WorkerFeedService', () => {
       reqId: subscribe.reqId,
       events: [makeEvent('e1'), makeEvent('e2')]
     });
+    vi.runAllTimers();
     expect(onEvent).toHaveBeenCalledTimes(2);
+    vi.useRealTimers();
   });
 
   it('posts stop for active subscription', () => {

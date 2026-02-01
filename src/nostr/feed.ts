@@ -7,6 +7,7 @@ import { AsyncEventVerifier, type EventVerifier } from './eventVerifier';
 
 const MAX_EVENTS = 300;
 const MAX_BUFFER = 400;
+const LIVE_FLUSH_INTERVAL_MS = 40;
 
 export class FeedOrchestrator implements FeedOrchestratorApi {
   private knownIds = new Set<string>();
@@ -26,6 +27,7 @@ export class FeedOrchestrator implements FeedOrchestratorApi {
   private lastOnUpdate?: (events: NostrEvent[]) => void;
   private lastOnProfiles?: (profiles: Record<string, ProfileMetadata>) => void;
   private lastOnPending?: (count: number) => void;
+  private liveFlushTimer?: ReturnType<typeof setTimeout>;
 
   constructor(
     private nostr: NostrClient,
@@ -49,6 +51,7 @@ export class FeedOrchestrator implements FeedOrchestratorApi {
     if (wasPaused === value) return;
     this.paused = value;
     if (value) {
+      this.clearLiveFlushTimer();
       this.service.stop();
       return;
     }
@@ -63,6 +66,7 @@ export class FeedOrchestrator implements FeedOrchestratorApi {
     this.pending = [];
     this.oldest = undefined;
     this.hydrated = false;
+    this.clearLiveFlushTimer();
   }
 
   subscribe(
@@ -81,6 +85,7 @@ export class FeedOrchestrator implements FeedOrchestratorApi {
   ) {
     this.hydrated = false;
     this.pending = [];
+    this.clearLiveFlushTimer();
     this.lastContext = { follows, followers, feedMode, listId, lists, tags };
     this.lastGetEvents = getEvents;
     this.lastOnUpdate = onUpdate;
@@ -115,12 +120,14 @@ export class FeedOrchestrator implements FeedOrchestratorApi {
   }
 
   stop() {
+    this.clearLiveFlushTimer();
     this.service.stop();
   }
 
   resumeIfBuffered() {
     if (!this.lastGetEvents || !this.lastOnUpdate) return;
     if (this.pending.length === 0) return;
+    this.clearLiveFlushTimer();
     const merged = this.flush(this.lastGetEvents());
     this.lastOnUpdate(merged);
     this.lastOnPending?.(0);
@@ -128,6 +135,7 @@ export class FeedOrchestrator implements FeedOrchestratorApi {
 
   flushPending(getEvents: () => NostrEvent[], onUpdate: (events: NostrEvent[]) => void) {
     if (this.pending.length === 0) return;
+    this.clearLiveFlushTimer();
     const merged = this.flush(getEvents());
     onUpdate(merged);
     // pending count becomes zero after flush
@@ -250,15 +258,32 @@ export class FeedOrchestrator implements FeedOrchestratorApi {
     }
     onPending?.(this.pending.length);
     this.profileQueue.add(event.pubkey);
-    if (!this.hydrated) {
-      const merged = this.flush(getEvents());
-      onUpdate(merged);
-      this.hydrated = true;
-    } else if (!this.paused) {
-      const merged = this.flush(getEvents());
-      onUpdate(merged);
-    }
+    this.scheduleLiveFlush(getEvents, onUpdate, onPending);
     this.drainProfiles(onProfiles);
+  }
+
+  private scheduleLiveFlush(
+    getEvents: () => NostrEvent[],
+    onUpdate: (events: NostrEvent[]) => void,
+    onPending?: (count: number) => void
+  ) {
+    if (this.paused) return;
+    if (this.liveFlushTimer) return;
+    const delay = this.hydrated ? LIVE_FLUSH_INTERVAL_MS : 0;
+    this.liveFlushTimer = globalThis.setTimeout(() => {
+      this.liveFlushTimer = undefined;
+      if (this.paused || this.pending.length === 0) return;
+      const merged = this.flush(getEvents());
+      onUpdate(merged);
+      onPending?.(0);
+      this.hydrated = true;
+    }, delay);
+  }
+
+  private clearLiveFlushTimer() {
+    if (!this.liveFlushTimer) return;
+    globalThis.clearTimeout(this.liveFlushTimer);
+    this.liveFlushTimer = undefined;
   }
 
   private flush(existing: NostrEvent[]): NostrEvent[] {

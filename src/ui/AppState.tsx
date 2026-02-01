@@ -89,6 +89,7 @@ interface AppStateValue {
 }
 
 const AppState = createContext<AppStateValue | undefined>(undefined);
+const FeedControlState = createContext<{ setPaused: (value: boolean) => void } | undefined>(undefined);
 
 export function AppStateProvider({ children }: { children: React.ReactNode }) {
   const nostr = useMemo(() => new NostrClient(), []);
@@ -354,9 +355,15 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
 
   const findEventById = feedState.findEventById;
 
+  const feedControlValue = useMemo(
+    () => ({ setPaused: feedState.setPaused }),
+    [feedState.setPaused]
+  );
+
   return (
-    <AppState.Provider
-      value={{
+    <FeedControlState.Provider value={feedControlValue}>
+      <AppState.Provider
+        value={{
         settings,
         events: feedState.events,
         profiles: feedState.profiles,
@@ -407,15 +414,22 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
         hashtagService,
         findEventById,
         saveP2PSettings
-      }}
-    >
-      {children}
-    </AppState.Provider>
+        }}
+      >
+        {children}
+      </AppState.Provider>
+    </FeedControlState.Provider>
   );
 }
 
 export function useAppState() {
   const context = useContext(AppState);
   if (!context) throw new Error('AppStateProvider missing');
+  return context;
+}
+
+export function useFeedControlState() {
+  const context = useContext(FeedControlState);
+  if (!context) throw new Error('FeedControlState provider missing');
   return context;
 }

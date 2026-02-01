@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { NostrEvent } from '../src/nostr/types';
 import { FeedOrchestrator } from '../src/nostr/feed';
 
@@ -15,7 +15,11 @@ class FakeService {
   }
 }
 
-class FakeClient {}
+class FakeClient {
+  async fetchProfile() {
+    return undefined;
+  }
+}
 
 function makeEvent(id: string, pubkey: string, patch: Partial<NostrEvent> = {}): NostrEvent {
   return {
@@ -31,6 +35,16 @@ function makeEvent(id: string, pubkey: string, patch: Partial<NostrEvent> = {}):
 }
 
 describe('FeedOrchestrator filtering', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.runOnlyPendingTimers();
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
   it('ignores events outside the author filter', () => {
     const service = new FakeService();
     const client = new FakeClient();
@@ -45,6 +59,7 @@ describe('FeedOrchestrator filtering', () => {
     );
 
     service.onEvent?.(makeEvent('1', 'bob'));
+    vi.runAllTimers();
 
     expect(updates.length).toBe(0);
   });
@@ -68,6 +83,7 @@ describe('FeedOrchestrator filtering', () => {
     );
 
     service.onEvent?.(makeEvent('1', 'alice'));
+    vi.runAllTimers();
 
     expect(assist).toHaveBeenCalledTimes(1);
   });
@@ -96,6 +112,7 @@ describe('FeedOrchestrator filtering', () => {
 
     const event = makeEvent('1', 'alice');
     service.onEvent?.(event);
+    vi.runAllTimers();
 
     expect(cache.setEvents).toHaveBeenCalledWith([event]);
   });
@@ -119,6 +136,7 @@ describe('FeedOrchestrator filtering', () => {
     );
 
     service.onEvent?.(makeEvent('1', 'alice'));
+    vi.runAllTimers();
 
     expect(transport.mark).toHaveBeenNthCalledWith(1, '1', { relay: true });
     expect(transport.mark).toHaveBeenNthCalledWith(2, '1', { verified: true });
@@ -139,9 +157,11 @@ describe('FeedOrchestrator filtering', () => {
     );
 
     service.onEvent?.(makeEvent('1', 'alice'));
+    vi.runAllTimers();
 
-    expect(onPending).toHaveBeenCalledTimes(1);
-    expect(onPending).toHaveBeenCalledWith(1);
+    expect(onPending).toHaveBeenCalledTimes(2);
+    expect(onPending).toHaveBeenNthCalledWith(1, 1);
+    expect(onPending).toHaveBeenNthCalledWith(2, 0);
   });
 
   it('keeps only latest version for addressable posts', () => {
@@ -170,6 +190,7 @@ describe('FeedOrchestrator filtering', () => {
 
     service.onEvent?.(older);
     service.onEvent?.(newer);
+    vi.runAllTimers();
 
     const last = updates[updates.length - 1] ?? [];
     expect(last.filter((event) => event.kind === 30023)).toHaveLength(1);
@@ -190,6 +211,7 @@ describe('FeedOrchestrator filtering', () => {
     );
 
     service.onEvent?.(makeEvent('hydration', 'alice'));
+    vi.runAllTimers();
     expect(updates.length).toBe(1);
 
     orchestrator.setPaused(true);
@@ -219,5 +241,31 @@ describe('FeedOrchestrator filtering', () => {
 
     orchestrator.setPaused(false);
     expect(service.subscribeCalls).toBe(2);
+  });
+
+  it('batches live updates across burst events', () => {
+    const service = new FakeService();
+    const client = new FakeClient();
+    const orchestrator = new FeedOrchestrator(client as any, service as any);
+    const updates: NostrEvent[][] = [];
+    let current: NostrEvent[] = [];
+
+    orchestrator.subscribe(
+      { follows: ['alice'], followers: [], feedMode: 'follows' },
+      () => current,
+      (next) => {
+        current = next;
+        updates.push(next);
+      },
+      () => null
+    );
+
+    service.onEvent?.(makeEvent('1', 'alice'));
+    service.onEvent?.(makeEvent('2', 'alice'));
+    service.onEvent?.(makeEvent('3', 'alice'));
+    vi.runAllTimers();
+
+    expect(updates.length).toBe(1);
+    expect(updates[0]?.map((event) => event.id)).toEqual(['3', '2', '1']);
   });
 });

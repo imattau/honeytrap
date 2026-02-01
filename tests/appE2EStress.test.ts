@@ -65,6 +65,7 @@ describe('App E2E stress', () => {
   });
 
   it('handles high-throughput ingest with pause/resume route changes', () => {
+    vi.useFakeTimers();
     const service = new WorkerFeedService(new FakeClient() as any);
     service.setRelays(['wss://relay.example']);
     const verifier = {
@@ -92,18 +93,25 @@ describe('App E2E stress', () => {
       () => null
     );
 
-    const subscribe = worker.messages.find((message) => message.type === 'subscribe');
-    expect(subscribe).toBeTruthy();
-    const reqId = subscribe.reqId as string;
+    const latestReqId = () => {
+      const subs = worker.messages.filter((message) => message.type === 'subscribe');
+      const last = subs[subs.length - 1];
+      return last?.reqId as string | undefined;
+    };
+    expect(latestReqId()).toBeTruthy();
 
     const total = 12000;
     const start = Date.now();
     for (let i = 0; i < total; i += 1) {
       if (i > 0 && i % 500 === 0) orchestrator.setPaused(true);
-      worker.emit({ type: 'event', reqId, event: makeEvent(i) });
+      const reqId = latestReqId();
+      if (reqId) {
+        worker.emit({ type: 'event', reqId, event: makeEvent(i) });
+      }
       if (i % 500 === 250) orchestrator.setPaused(false);
     }
     orchestrator.setPaused(false);
+    vi.runAllTimers();
     const elapsedMs = Date.now() - start;
 
     const uniqueIdentityCount = new Set(snapshot.map(identityKey)).size;
@@ -114,5 +122,6 @@ describe('App E2E stress', () => {
 
     orchestrator.stop();
     service.destroy();
+    vi.useRealTimers();
   });
 });

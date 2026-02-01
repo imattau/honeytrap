@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Virtuoso, type VirtuosoHandle } from 'react-virtuoso';
 import { BrowserRouter, Route, Routes, useNavigate, useLocation } from 'react-router-dom';
-import { AppStateProvider, useAppState } from './ui/AppState';
+import { AppStateProvider, useAppState, useFeedControlState } from './ui/AppState';
 import { Drawer } from './ui/Drawer';
 import { PostCard } from './ui/PostCard';
 import { ThreadStack } from './ui/ThreadStack';
@@ -26,8 +26,7 @@ function Feed() {
     publishReply,
     mediaRelayList,
     settings,
-    attachMedia,
-    setPaused
+    attachMedia
   } = useAppState();
   const [composerOpen, setComposerOpen] = useState(false);
   const [replyTarget, setReplyTarget] = useState<NostrEvent | undefined>(undefined);
@@ -40,13 +39,6 @@ function Feed() {
   const pullStartRef = useRef<number | null>(null);
   const wheelPullRef = useRef<number>(0);
   const wheelTimerRef = useRef<number | null>(null);
-
-  useEffect(() => {
-    setPaused(false);
-    return () => {
-      setPaused(true);
-    };
-  }, [setPaused]);
 
   useEffect(() => {
     if (location.pathname !== '/') return;
@@ -164,6 +156,12 @@ function Feed() {
 
 function AppRoutes() {
   const location = useLocation();
+  const { setPaused } = useFeedControlState();
+
+  useEffect(() => {
+    setPaused(location.pathname !== '/');
+  }, [location.pathname, setPaused]);
+
   return (
     <Routes location={location} key={location.pathname}>
       <Route path="/" element={<Feed />} />
