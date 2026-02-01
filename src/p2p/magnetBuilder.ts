@@ -1,10 +1,10 @@
-import WebTorrent from 'webtorrent/dist/webtorrent.min.js';
 import type { Torrent } from 'webtorrent';
 import type { NostrEvent } from '../nostr/types';
 import { canonicaliseEvent } from './canonical';
 import { sha256Hex } from './verify';
 import type { P2PSettings } from '../storage/types';
 import type { TorrentRegistry } from './registry';
+import type { WebTorrentHub } from './webtorrentHub';
 
 export interface MagnetResult {
   magnet?: string;
@@ -12,32 +12,19 @@ export interface MagnetResult {
 }
 
 export class MagnetBuilder {
-  private client?: WebTorrent;
+  private hub?: WebTorrentHub;
 
-  constructor(private settings: P2PSettings, private registry?: TorrentRegistry) {
-    if (settings.enabled) {
-      this.client = new WebTorrent({
-        tracker: { announce: settings.trackers }
-      });
-    }
+  constructor(private settings: P2PSettings, private registry?: TorrentRegistry, hub?: WebTorrentHub) {
+    this.hub = hub;
   }
 
   updateSettings(settings: P2PSettings) {
     this.settings = settings;
-    if (!settings.enabled) {
-      this.client?.destroy();
-      this.client = undefined;
-      return;
-    }
-    if (!this.client) {
-      this.client = new WebTorrent({
-        tracker: { announce: settings.trackers }
-      });
-    }
+    // hub owns client lifecycle
   }
 
   async buildEventPackage(event: NostrEvent): Promise<MagnetResult> {
-    if (!this.client || !this.settings.enabled) return {};
+    if (!this.hub?.getClient() || !this.settings.enabled) return {};
     const canonical = canonicaliseEvent(event);
     const sha256 = await sha256Hex(canonical);
     const magnet = await this.seedBytes('event.json', canonical);
@@ -45,7 +32,7 @@ export class MagnetBuilder {
   }
 
   async buildMediaPackage(url: string): Promise<MagnetResult> {
-    if (!this.client || !this.settings.enabled) return {};
+    if (!this.hub?.getClient() || !this.settings.enabled) return {};
     const response = await fetch(url);
     const data = await response.arrayBuffer();
     const sizeMb = data.byteLength / 1024 / 1024;
@@ -57,7 +44,7 @@ export class MagnetBuilder {
   }
 
   async buildMediaPackageFromBytes(name: string, data: ArrayBuffer): Promise<MagnetResult> {
-    if (!this.client || !this.settings.enabled) return {};
+    if (!this.hub?.getClient() || !this.settings.enabled) return {};
     const sizeMb = data.byteLength / 1024 / 1024;
     if (sizeMb > this.settings.maxFileSizeMb) return {};
     const sha256 = await sha256Hex(data);
@@ -66,12 +53,12 @@ export class MagnetBuilder {
   }
 
   private async seedBytes(name: string, data: ArrayBuffer | Uint8Array): Promise<string | undefined> {
-    if (!this.client) return undefined;
+    if (!this.hub?.getClient()) return undefined;
     try {
       const bytes = data instanceof Uint8Array ? data : new Uint8Array(data);
       const file = new File([bytes as BlobPart], name, { type: 'application/octet-stream' });
       const torrent = await new Promise<Torrent>((resolve, reject) => {
-        this.client!.seed(file, (seeded) => resolve(seeded)).on('error', reject);
+        this.hub!.seed(file, (seeded) => resolve(seeded)).on('error', reject);
       });
       const magnet = torrent.magnetURI;
       if (magnet) {

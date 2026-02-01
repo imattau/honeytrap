@@ -10,6 +10,7 @@ import { TorrentListService } from '../../nostr/torrentList';
 import type { Nip44Cipher } from '../../nostr/nip44';
 import type { AssistSource } from '../../p2p/types';
 import type { TransportStore } from '../../nostr/transport';
+import { WebTorrentHub } from '../../p2p/webtorrentHub';
 
 export function useP2PState({
   settings,
@@ -30,8 +31,9 @@ export function useP2PState({
   const [canEncryptNip44, setCanEncryptNip44] = useState(false);
 
   const torrentRegistry = useMemo(() => new TorrentRegistry(), []);
-  const mediaAssist = useMemo(() => new MediaAssist(settings.p2p, torrentRegistry), [settings.p2p, torrentRegistry]);
-  const magnetBuilder = useMemo(() => new MagnetBuilder(settings.p2p, torrentRegistry), [settings.p2p, torrentRegistry]);
+  const webtorrentHub = useMemo(() => new WebTorrentHub(settings.p2p), []);
+  const mediaAssist = useMemo(() => new MediaAssist(settings.p2p, torrentRegistry, webtorrentHub), [settings.p2p, torrentRegistry, webtorrentHub]);
+  const magnetBuilder = useMemo(() => new MagnetBuilder(settings.p2p, torrentRegistry, webtorrentHub), [settings.p2p, torrentRegistry, webtorrentHub]);
   const torrentListService = useMemo(
     () => new TorrentListService(nostr, signer, nip44Cipher),
     [nostr, signer, nip44Cipher]
@@ -45,6 +47,10 @@ export function useP2PState({
   useEffect(() => {
     magnetBuilder.updateSettings(settings.p2p);
   }, [magnetBuilder, settings.p2p]);
+
+  useEffect(() => {
+    webtorrentHub.updateSettings(settings.p2p);
+  }, [webtorrentHub, settings.p2p]);
 
   useEffect(() => {
     const unsubscribe = torrentRegistry.subscribe(setTorrentSnapshot);

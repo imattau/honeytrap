@@ -1,6 +1,7 @@
 import type { AssistSource } from './types';
 import { WebTorrentAssist } from './webtorrent';
 import type { TorrentRegistry } from './registry';
+import type { WebTorrentHub } from './webtorrentHub';
 import type { P2PSettings } from '../storage/types';
 import type { MediaAssistApi } from '../nostr/contracts';
 
@@ -13,8 +14,8 @@ export class MediaAssist implements MediaAssistApi {
   private p2p: WebTorrentAssist;
   private cache = new Map<string, Promise<MediaAssistResult>>();
 
-  constructor(private settings: P2PSettings, registry?: TorrentRegistry) {
-    this.p2p = new WebTorrentAssist(settings, registry);
+  constructor(private settings: P2PSettings, registry?: TorrentRegistry, hub?: WebTorrentHub) {
+    this.p2p = new WebTorrentAssist(settings, registry, hub);
   }
 
   updateSettings(settings: P2PSettings) {

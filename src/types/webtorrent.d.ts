@@ -21,7 +21,7 @@ declare module 'webtorrent' {
   export default class WebTorrent {
     constructor(opts?: any);
     add(magnet: string, cb: (torrent: Torrent) => void): Torrent;
-    seed(file: File | Blob | ArrayBuffer | Uint8Array, cb: (torrent: Torrent) => void): { on: (event: 'error', cb: (err: Error) => void) => void };
+    seed(file: File | Blob | ArrayBuffer | Uint8Array, cb: (torrent: Torrent) => void): Torrent;
     destroy(): void;
   }
 }

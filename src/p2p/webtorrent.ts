@@ -1,8 +1,8 @@
-import WebTorrent from 'webtorrent/dist/webtorrent.min.js';
 import type { Torrent } from 'webtorrent';
 import { verifySha256 } from './verify';
 import type { AssistResult, AssistSource } from './types';
 import type { TorrentRegistry } from './registry';
+import type { WebTorrentHub } from './webtorrentHub';
 
 export interface TorrentSettings {
   enabled: boolean;
@@ -13,35 +13,20 @@ export interface TorrentSettings {
 }
 
 export class WebTorrentAssist {
-  private client?: WebTorrent;
+  private hub?: WebTorrentHub;
   private active = 0;
 
-  constructor(private settings: TorrentSettings, private registry?: TorrentRegistry) {
-    if (settings.enabled) {
-      this.client = new WebTorrent({
-        tracker: {
-          announce: settings.trackers
-        }
-      });
-    }
+  constructor(private settings: TorrentSettings, private registry?: TorrentRegistry, hub?: WebTorrentHub) {
+    this.hub = hub;
   }
 
   updateSettings(settings: TorrentSettings) {
     this.settings = settings;
-    if (!settings.enabled) {
-      this.client?.destroy();
-      this.client = undefined;
-      return;
-    }
-    if (!this.client) {
-      this.client = new WebTorrent({
-        tracker: { announce: settings.trackers }
-      });
-    }
+    // hub owns client lifecycle
   }
 
   async fetchWithAssist(source: AssistSource, timeoutMs: number, allowP2P: boolean): Promise<AssistResult> {
-    if (allowP2P && source.magnet && this.client && this.active < this.settings.maxConcurrent) {
+    if (allowP2P && source.magnet && this.hub?.getClient() && this.active < this.settings.maxConcurrent) {
       try {
         const result = await this.fetchViaTorrent(source, timeoutMs);
         if (result) return { source: 'p2p', data: result };
@@ -58,7 +43,7 @@ export class WebTorrentAssist {
   }
 
   private async fetchViaTorrent(source: AssistSource, timeoutMs: number): Promise<ArrayBuffer | undefined> {
-    if (!this.client) return undefined;
+    if (!this.hub?.getClient()) return undefined;
     this.active += 1;
     try {
       const torrent = await this.addTorrent(source.magnet!, timeoutMs, source);
@@ -84,7 +69,7 @@ export class WebTorrentAssist {
   }
 
   private addTorrent(magnet: string, timeoutMs: number, source: AssistSource): Promise<Torrent | undefined> {
-    if (!this.client) return Promise.resolve(undefined);
+    if (!this.hub?.getClient()) return Promise.resolve(undefined);
     return new Promise((resolve) => {
       let timedOut = false;
       const timer = setTimeout(() => {
@@ -93,7 +78,7 @@ export class WebTorrentAssist {
         resolve(undefined);
       }, timeoutMs);
 
-      this.client!.add(magnet, (torrent: Torrent) => {
+      this.hub!.add(magnet, (torrent: Torrent) => {
         if (timedOut) {
           torrent.destroy();
           return;
