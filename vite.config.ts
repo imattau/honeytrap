@@ -4,6 +4,9 @@ import { VitePWA } from 'vite-plugin-pwa';
 
 export default defineConfig({
   assetsInclude: ['**/*.wasm'],
+  preview: {
+    allowedHosts: 'all'
+  },
   plugins: [
     react(),
     VitePWA({
