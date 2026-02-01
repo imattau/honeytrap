@@ -14,6 +14,7 @@ interface TorrentSectionProps {
 export function TorrentSection({ value, onChange, onSave, saved }: TorrentSectionProps) {
   const { torrents, canEncryptNip44, reseedTorrent } = useAppState();
   const [showAll, setShowAll] = React.useState(false);
+  const [reseeding, setReseeding] = React.useState<Record<string, boolean>>({});
   const activeTorrents = useMemo(() => {
     return Object.values(torrents)
       .filter((item) => showAll || item.active)
@@ -125,8 +126,20 @@ export function TorrentSection({ value, onChange, onSave, saved }: TorrentSectio
                   <span>{Math.round(item.progress * 100)}%</span>
                   <span>{item.peers} peers</span>
                   {!item.active && (
-                    <button className="torrent-reseed" onClick={() => reseedTorrent(item.magnet)}>
-                      Reseed
+                    <button
+                      className={`torrent-reseed ${reseeding[item.magnet] ? 'active' : ''}`}
+                      onClick={() => {
+                        setReseeding((prev) => ({ ...prev, [item.magnet]: true }));
+                        try {
+                          reseedTorrent(item.magnet);
+                        } finally {
+                          window.setTimeout(() => {
+                            setReseeding((prev) => ({ ...prev, [item.magnet]: false }));
+                          }, 1200);
+                        }
+                      }}
+                    >
+                      {reseeding[item.magnet] ? 'Reseeding…' : 'Reseed'}
                     </button>
                   )}
                 </div>
