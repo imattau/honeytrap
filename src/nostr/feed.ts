@@ -1,10 +1,10 @@
 import type { NostrEvent, ProfileMetadata, ListDescriptor } from './types';
 import { NostrClient } from './client';
 import { FeedService } from './service';
-import { verifyEvent } from 'nostr-tools';
 import type { TransportStore } from './transport';
 import type { FeedOrchestratorApi } from './contracts';
 import type { NostrCache } from './cache';
+import { AsyncEventVerifier, type EventVerifier } from './eventVerifier';
 
 const MAX_EVENTS = 300;
 const MAX_BUFFER = 400;
@@ -22,6 +22,7 @@ export class FeedOrchestrator implements FeedOrchestratorApi {
   private hydrated = false;
   private lastContext?: { follows: string[]; followers: string[]; feedMode: 'all' | 'follows' | 'followers' | 'both'; listId?: string; lists?: ListDescriptor[]; tags?: string[] };
   private cache?: NostrCache;
+  private verifier: EventVerifier;
   private lastGetEvents?: () => NostrEvent[];
   private lastOnUpdate?: (events: NostrEvent[]) => void;
   private lastOnProfiles?: (profiles: Record<string, ProfileMetadata>) => void;
@@ -32,9 +33,11 @@ export class FeedOrchestrator implements FeedOrchestratorApi {
     private transport?: TransportStore,
     private isBlocked?: (pubkey: string) => boolean,
     private onEventAssist?: (event: NostrEvent) => void,
-    cache?: NostrCache
+    cache?: NostrCache,
+    verifier?: EventVerifier
   ) {
     this.cache = cache;
+    this.verifier = verifier ?? new AsyncEventVerifier();
   }
 
   getProfiles() {
@@ -106,7 +109,7 @@ export class FeedOrchestrator implements FeedOrchestratorApi {
         if (normalizedTags.length > 0 && !matchesTag(event, normalizedTags)) return;
         if (this.knownIds.has(event.id)) return;
         this.knownIds.add(event.id);
-        this.transport?.mark(event.id, { relay: true, verified: verifyEvent(event as any) });
+        this.markTransport(event);
         this.onEventAssist?.(event);
         this.pending.push(event);
         onPending?.(this.pending.length);
@@ -161,7 +164,7 @@ export class FeedOrchestrator implements FeedOrchestratorApi {
     const unique = older.filter((event) => !this.knownIds.has(event.id) && !this.isBlocked?.(event.pubkey));
     if (unique.length === 0) return;
     unique.forEach((event) => this.knownIds.add(event.id));
-    unique.forEach((event) => this.transport?.mark(event.id, { relay: true, verified: verifyEvent(event as any) }));
+    unique.forEach((event) => this.markTransport(event));
     const merged = this.mergeEvents(getEvents(), unique);
     onUpdate(merged);
     this.cache?.setEvents(unique).catch(() => null);
@@ -224,6 +227,13 @@ export class FeedOrchestrator implements FeedOrchestratorApi {
     merged.sort((a, b) => b.created_at - a.created_at);
     this.oldest = merged[merged.length - 1]?.created_at ?? this.oldest;
     return merged.slice(0, MAX_EVENTS);
+  }
+
+  private markTransport(event: NostrEvent) {
+    this.transport?.mark(event.id, { relay: true });
+    this.verifier.verify(event, (id, verified) => {
+      this.transport?.mark(id, { verified });
+    });
   }
 }
 

@@ -15,6 +15,7 @@ import { SocialGraph } from '../nostr/social';
 import type { TorrentSnapshot } from '../p2p/registry';
 import { HashtagService } from '../nostr/hashtag';
 import { MediaAttachService, type MediaAttachMode, type MediaAttachResult } from '../p2p/mediaAttach';
+import { AsyncEventVerifier } from '../nostr/eventVerifier';
 import { useAuthState } from './state/useAuthState';
 import { useSettingsState } from './state/useSettingsState';
 import { useTransportState } from './state/useTransportState';
@@ -92,6 +93,7 @@ const AppState = createContext<AppStateValue | undefined>(undefined);
 export function AppStateProvider({ children }: { children: React.ReactNode }) {
   const nostr = useMemo(() => new NostrClient(), []);
   const nostrCache = useMemo(() => new NostrCache(), []);
+  const eventVerifier = useMemo(() => new AsyncEventVerifier(), []);
   const { keys, signer, nip44Cipher, loadKeysFromStorage, saveKeyRecord, clearKeys, connectNip07, connectRemoteSigner, disconnectRemoteSigner } = useAuthState();
   const { transportStore } = useTransportState();
   const { settings, updateSettings } = useSettingsState(defaultSettings);
@@ -129,22 +131,23 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     followers,
     isBlocked: isBlockedRef,
     cache: nostrCache,
-    onEventAssist: assistEvent
+    onEventAssist: assistEvent,
+    verifier: eventVerifier
   });
 
   const [selfProfile, setSelfProfile] = useState<ProfileMetadata | undefined>(undefined);
 
   const authorService = useMemo(
-    () => new AuthorService(nostr, transportStore, isBlockedRef),
-    [nostr, transportStore, isBlockedRef]
+    () => new AuthorService(nostr, transportStore, isBlockedRef, eventVerifier),
+    [nostr, transportStore, isBlockedRef, eventVerifier]
   );
   const hashtagService = useMemo(
-    () => new HashtagService(nostr, transportStore, isBlockedRef),
-    [nostr, transportStore, isBlockedRef]
+    () => new HashtagService(nostr, transportStore, isBlockedRef, eventVerifier),
+    [nostr, transportStore, isBlockedRef, eventVerifier]
   );
   const threadService = useMemo(
-    () => new ThreadService(nostr, transportStore, isBlockedRef),
-    [nostr, transportStore, isBlockedRef]
+    () => new ThreadService(nostr, transportStore, isBlockedRef, eventVerifier),
+    [nostr, transportStore, isBlockedRef, eventVerifier]
   );
   const publishService = useMemo(() => new PublishService(nostr, signer), [nostr, signer]);
   const zapService = useMemo(() => new ZapService(signer), [signer]);

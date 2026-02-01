@@ -3,6 +3,7 @@ import { NostrClient } from './client';
 import { FeedOrchestrator } from './feed';
 import { FeedService } from './service';
 import type { TransportStore } from './transport';
+import type { EventVerifier } from './eventVerifier';
 
 export class HashtagService {
   private feedService: FeedService;
@@ -11,10 +12,11 @@ export class HashtagService {
   constructor(
     private client: NostrClient,
     transport?: TransportStore,
-    isBlocked?: (pubkey: string) => boolean
+    isBlocked?: (pubkey: string) => boolean,
+    verifier?: EventVerifier
   ) {
     this.feedService = new FeedService(client);
-    this.orchestrator = new FeedOrchestrator(client, this.feedService, transport, isBlocked);
+    this.orchestrator = new FeedOrchestrator(client, this.feedService, transport, isBlocked, undefined, undefined, verifier);
   }
 
   subscribeHashtagFeed(

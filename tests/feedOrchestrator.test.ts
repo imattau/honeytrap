@@ -93,4 +93,28 @@ describe('FeedOrchestrator filtering', () => {
 
     expect(cache.setEvents).toHaveBeenCalledWith([event]);
   });
+
+  it('marks relay immediately and verification via verifier callback', () => {
+    const service = new FakeService();
+    const client = new FakeClient();
+    const transport = { mark: vi.fn() };
+    const verifier = {
+      verify: (_event: NostrEvent, onResult: (id: string, verified: boolean) => void) => {
+        onResult('1', true);
+      }
+    };
+    const orchestrator = new FeedOrchestrator(client as any, service as any, transport as any, undefined, undefined, undefined, verifier as any);
+
+    orchestrator.subscribe(
+      { follows: ['alice'], followers: [], feedMode: 'follows' },
+      () => [],
+      () => null,
+      () => null
+    );
+
+    service.onEvent?.(makeEvent('1', 'alice'));
+
+    expect(transport.mark).toHaveBeenNthCalledWith(1, '1', { relay: true });
+    expect(transport.mark).toHaveBeenNthCalledWith(2, '1', { verified: true });
+  });
 });

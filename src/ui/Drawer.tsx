@@ -50,6 +50,7 @@ export function Drawer() {
   const touchScrollTopRef = useRef<number>(0);
   const fallbackAvatar = '/assets/honeytrap_logo_256.png';
   const headerImage = '/assets/honeytrap_header_960.png';
+  const appVersion = __APP_VERSION__;
 
   useEffect(() => {
     setMenuState(buildMenuState(settings, relayList, mediaRelayList));
@@ -252,6 +253,7 @@ export function Drawer() {
         <div className="menu-banner">
           <img src={headerImage} alt="Honeytrap" />
         </div>
+        <div className="drawer-version">v{appVersion}</div>
         {!isAuthed ? (
           <MenuSection title="Sign in" icon={<KeyRound size={16} />} collapsible={false}>
               {!isTouch && (

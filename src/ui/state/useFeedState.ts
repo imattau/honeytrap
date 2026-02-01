@@ -7,6 +7,7 @@ import { FeedOrchestrator } from '../../nostr/feed';
 import type { TransportStore } from '../../nostr/transport';
 import { SocialGraph } from '../../nostr/social';
 import type { NostrCache } from '../../nostr/cache';
+import type { EventVerifier } from '../../nostr/eventVerifier';
 
 export function useFeedState({
   nostr,
@@ -15,7 +16,8 @@ export function useFeedState({
   followers,
   isBlocked,
   cache,
-  onEventAssist
+  onEventAssist,
+  verifier
 }: {
   nostr: NostrClient;
   transportStore: TransportStore;
@@ -24,6 +26,7 @@ export function useFeedState({
   isBlocked: (pubkey: string) => boolean;
   cache?: NostrCache;
   onEventAssist?: (event: NostrEvent) => void;
+  verifier?: EventVerifier;
 }) {
   const [events, setEvents] = useState<NostrEvent[]>([]);
   const [profiles, setProfiles] = useState<Record<string, ProfileMetadata>>({});
@@ -35,8 +38,8 @@ export function useFeedState({
 
   const feedService = useMemo(() => new FeedService(nostr), [nostr]);
   const orchestrator = useMemo(
-    () => new FeedOrchestrator(nostr, feedService, transportStore, isBlocked, onEventAssist, cache),
-    [nostr, feedService, transportStore, isBlocked, onEventAssist, cache]
+    () => new FeedOrchestrator(nostr, feedService, transportStore, isBlocked, onEventAssist, cache, verifier),
+    [nostr, feedService, transportStore, isBlocked, onEventAssist, cache, verifier]
   );
 
   const eventsRef = useRef<NostrEvent[]>([]);

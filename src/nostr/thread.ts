@@ -1,8 +1,8 @@
 import type { NostrEvent } from './types';
 import { NostrClient } from './client';
 import type { TransportStore } from './transport';
-import { verifyEvent } from 'nostr-tools';
 import type { ThreadServiceApi } from './contracts';
+import { AsyncEventVerifier, type EventVerifier } from './eventVerifier';
 
 export interface ThreadNode {
   event: NostrEvent;
@@ -11,23 +11,28 @@ export interface ThreadNode {
 }
 
 export class ThreadService implements ThreadServiceApi {
+  private verifier: EventVerifier;
+
   constructor(
     private client: NostrClient,
     private transport?: TransportStore,
-    private isBlocked?: (pubkey: string) => boolean
-  ) {}
+    private isBlocked?: (pubkey: string) => boolean,
+    verifier?: EventVerifier
+  ) {
+    this.verifier = verifier ?? new AsyncEventVerifier();
+  }
 
   async loadThread(eventId: string): Promise<ThreadNode[]> {
     const target = await this.client.fetchEventById(eventId);
     if (!target) return [];
     if (this.isBlocked?.(target.pubkey)) return [];
-    this.transport?.mark(target.id, { relay: true, verified: verifyEvent(target as any) });
+    this.markTransport(target);
 
     const ancestors = await this.loadAncestors(target);
     const replies = (await this.client.fetchReplies(target.id))
       .filter((reply) => !this.isBlocked?.(reply.pubkey));
     replies.forEach((reply) => {
-      this.transport?.mark(reply.id, { relay: true, verified: verifyEvent(reply as any) });
+      this.markTransport(reply);
     });
 
     const nodes: ThreadNode[] = [];
@@ -35,7 +40,7 @@ export class ThreadService implements ThreadServiceApi {
     chain.forEach((event, index) => {
       if (this.isBlocked?.(event.pubkey)) return;
       const role = index === 0 ? 'root' : 'ancestor';
-      this.transport?.mark(event.id, { relay: true, verified: verifyEvent(event as any) });
+      this.markTransport(event);
       nodes.push({ event, depth: index, role });
     });
 
@@ -67,6 +72,13 @@ export class ThreadService implements ThreadServiceApi {
       current = parent;
     }
     return chain;
+  }
+
+  private markTransport(event: NostrEvent) {
+    this.transport?.mark(event.id, { relay: true });
+    this.verifier.verify(event, (id, verified) => {
+      this.transport?.mark(id, { verified });
+    });
   }
 }
 
