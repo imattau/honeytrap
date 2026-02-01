@@ -22,6 +22,7 @@ export default defineConfig({
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,webp,woff2}'],
         navigateFallback: '/index.html',
+        globIgnores: ['**/assets/honeytrap_logo_192.png', '**/assets/honeytrap_logo_512.png'],
         runtimeCaching: [
           {
             urlPattern: ({ request }) => request.mode === 'navigate',
