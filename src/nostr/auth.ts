@@ -1,5 +1,6 @@
 import { generateSecretKey } from 'nostr-tools';
 import { BunkerSigner, parseBunkerInput } from 'nostr-tools/nip46';
+import { SimplePool } from 'nostr-tools/pool';
 import { getPublicKey, nip19 } from 'nostr-tools';
 import { bytesToHex } from 'nostr-tools/utils';
 import type { KeyRecord } from '../storage/types';
@@ -9,18 +10,31 @@ export interface Nip46Session {
   pubkey: string;
 }
 
-export async function connectNip46(input: string): Promise<Nip46Session> {
+export async function connectNip46(input: string, onAuthUrl?: (url: string) => void): Promise<Nip46Session> {
   const trimmed = input.trim();
   if (!trimmed) throw new Error('Missing bunker/nostrconnect URI');
   const secretKey = generateSecretKey();
+  const pool = new SimplePool({ enablePing: true, enableReconnect: true });
+  const params = {
+    pool,
+    onauth: (url: string) => {
+      onAuthUrl?.(url);
+    }
+  };
 
   let signer: BunkerSigner | null = null;
   if (trimmed.startsWith('nostrconnect://')) {
-    signer = await BunkerSigner.fromURI(secretKey, trimmed);
+    const uri = new URL(trimmed);
+    const relays = uri.searchParams.getAll('relay');
+    if (relays.length === 0) throw new Error('nostrconnect URI missing relay parameter');
+    signer = await BunkerSigner.fromURI(secretKey, trimmed, params, 30_000);
   } else {
     const pointer = await parseBunkerInput(trimmed);
     if (!pointer) throw new Error('Invalid bunker address');
-    signer = BunkerSigner.fromBunker(secretKey, pointer, {});
+    if (!pointer.relays || pointer.relays.length === 0) {
+      throw new Error('Bunker address missing relay (add ?relay=wss://...)');
+    }
+    signer = BunkerSigner.fromBunker(secretKey, pointer, params);
   }
   const pubkey = await signer.getPublicKey();
   return { signer, pubkey };

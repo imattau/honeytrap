@@ -39,6 +39,7 @@ export function Drawer() {
   const [connectStatus, setConnectStatus] = useState<string | null>(null);
   const [savedSection, setSavedSection] = useState<'relays' | 'media' | 'torrent' | 'wallet' | null>(null);
   const [isWide, setIsWide] = useState(false);
+  const [isTouch, setIsTouch] = useState(false);
   const [menuState, setMenuState] = useState(() => buildMenuState(settings, relayList, mediaRelayList));
   const [relaysOpen, setRelaysOpen] = useState(false);
   const fallbackAvatar = '/assets/honeytrap_logo_256.png';
@@ -72,6 +73,14 @@ export function Drawer() {
     return () => mq.removeEventListener('change', update);
   }, []);
 
+  useEffect(() => {
+    const mq = window.matchMedia('(pointer: coarse)');
+    const update = () => setIsTouch(mq.matches);
+    update();
+    mq.addEventListener('change', update);
+    return () => mq.removeEventListener('change', update);
+  }, []);
+
   const isAuthed = Boolean(keys?.npub);
 
   const handleNsecSave = async () => {
@@ -89,7 +98,9 @@ export function Drawer() {
     if (!bunkerInput.trim()) return;
     setConnectStatus('Connecting...');
     try {
-      const pubkey = await connectNip46(bunkerInput.trim());
+      const pubkey = await connectNip46(bunkerInput.trim(), (authUrl) => {
+        setConnectStatus(`Approve in bunker: ${authUrl}`);
+      });
       setConnectStatus(`Connected as ${pubkey.slice(0, 10)}…`);
     } catch (error) {
       setConnectStatus(error instanceof Error ? error.message : 'Failed to connect');
@@ -146,9 +157,11 @@ export function Drawer() {
         </div>
         {!isAuthed ? (
           <MenuSection title="Sign in" icon={<KeyRound size={16} />} collapsible={false}>
-              <button className="menu-button" onClick={handleNip07}>
-                NIP-07 Extension
-              </button>
+              {!isTouch && (
+                <button className="menu-button" onClick={handleNip07}>
+                  NIP-07 Extension
+                </button>
+              )}
               <label className="menu-label"><QrCode size={14} /> NIP-46 / Bunker</label>
               <input
                 className="menu-input"
