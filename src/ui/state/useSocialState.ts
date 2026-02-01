@@ -15,6 +15,11 @@ export function useSocialState({
 }) {
   const [followers, setFollowers] = useState<string[]>([]);
   const fetchRef = useRef({ followersAt: 0, followingAt: 0 });
+  const settingsRef = useRef(settings);
+
+  useEffect(() => {
+    settingsRef.current = settings;
+  }, [settings]);
 
   useEffect(() => {
     if (!keysNpub) {
@@ -47,7 +52,7 @@ export function useSocialState({
         if (!active) return;
         if (list.length === 0) return;
         if (sameSet(list, settings.follows)) return;
-        updateSettings({ ...settings, follows: list });
+        updateSettings({ ...settingsRef.current, follows: list });
       })
       .catch(() => null);
     return () => {
