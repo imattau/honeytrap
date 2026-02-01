@@ -25,6 +25,12 @@ export interface FeedEventMessage {
   event: NostrEvent;
 }
 
+export interface FeedEventBatchMessage {
+  type: 'event-batch';
+  reqId: string;
+  events: NostrEvent[];
+}
+
 export interface FeedCloseMessage {
   type: 'close';
   reqId: string;
@@ -37,4 +43,4 @@ export interface FeedErrorMessage {
   message: string;
 }
 
-export type FeedWorkerResponse = FeedEventMessage | FeedCloseMessage | FeedErrorMessage;
+export type FeedWorkerResponse = FeedEventMessage | FeedEventBatchMessage | FeedCloseMessage | FeedErrorMessage;

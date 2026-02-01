@@ -5,6 +5,8 @@ import type { NostrClient } from './client';
 import type { FeedWorkerRequest, FeedWorkerResponse } from './worker/feedFetchProtocol';
 
 interface SubscriptionState {
+  authors?: string[];
+  tags?: string[];
   onEvent: (event: NostrEvent) => void;
   onClose?: (reasons: string[]) => void;
 }
@@ -38,7 +40,12 @@ export class WorkerFeedService implements FeedServiceApi {
       return;
     }
     this.active = true;
-    this.state = { onEvent: input.onEvent, onClose: input.onClose };
+    this.state = {
+      authors: input.authors,
+      tags: input.tags,
+      onEvent: input.onEvent,
+      onClose: input.onClose
+    };
     this.backoffMs = 600;
     this.reqId = `feed-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     this.post({
@@ -78,6 +85,10 @@ export class WorkerFeedService implements FeedServiceApi {
       this.state.onEvent(message.event);
       return;
     }
+    if (message.type === 'event-batch') {
+      message.events.forEach((event) => this.state?.onEvent(event));
+      return;
+    }
     if (message.type === 'close') {
       this.state.onClose?.(message.reasons);
       if (!this.active) return;
@@ -88,7 +99,9 @@ export class WorkerFeedService implements FeedServiceApi {
         this.post({
           type: 'subscribe',
           reqId: this.reqId,
-          relays: this.relays
+          relays: this.relays,
+          authors: this.state.authors,
+          tags: this.state.tags
         });
       }, delay);
       this.backoffMs = Math.min(this.backoffMs * 1.7, 30_000);

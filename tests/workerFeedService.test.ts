@@ -65,6 +65,19 @@ describe('WorkerFeedService', () => {
     expect(onEvent).toHaveBeenCalledWith(expect.objectContaining({ id: 'e1' }));
   });
 
+  it('forwards batched worker events', () => {
+    const service = new WorkerFeedService({} as any);
+    const onEvent = vi.fn();
+    service.subscribeTimeline({ onEvent });
+    const subscribe = instance.messages.find((message) => message.type === 'subscribe');
+    instance.emit({
+      type: 'event-batch',
+      reqId: subscribe.reqId,
+      events: [makeEvent('e1'), makeEvent('e2')]
+    });
+    expect(onEvent).toHaveBeenCalledTimes(2);
+  });
+
   it('posts stop for active subscription', () => {
     const service = new WorkerFeedService({} as any);
     service.subscribeTimeline({ onEvent: () => null });
@@ -73,5 +86,26 @@ describe('WorkerFeedService', () => {
     const stop = instance.messages.find((message) => message.type === 'stop');
     expect(stop).toBeTruthy();
     expect(stop.reqId).toBe(subscribe.reqId);
+  });
+
+  it('retries with original filters after close', () => {
+    vi.useFakeTimers();
+    const service = new WorkerFeedService({} as any);
+    const onEvent = vi.fn();
+    service.setRelays(['wss://relay.example']);
+    service.subscribeTimeline({ authors: ['alice'], tags: ['nostr'], onEvent });
+    const subscribe = instance.messages.find((message) => message.type === 'subscribe');
+    instance.emit({
+      type: 'close',
+      reqId: subscribe.reqId,
+      reasons: ['closed']
+    });
+    vi.runAllTimers();
+    const retries = instance.messages.filter((message) => message.type === 'subscribe');
+    expect(retries.length).toBeGreaterThan(1);
+    const retry = retries[retries.length - 1];
+    expect(retry.authors).toEqual(['alice']);
+    expect(retry.tags).toEqual(['nostr']);
+    vi.useRealTimers();
   });
 });
