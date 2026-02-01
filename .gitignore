@@ -1,0 +1,15 @@
+# Dependencies
+node_modules/
+
+# Build output
+/dist/
+
+# Vite cache
+.vite/
+
+# OS files
+.DS_Store
+
+# Local task notes
+TASKS*.md
+AGENTS.md
