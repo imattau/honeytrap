@@ -93,7 +93,8 @@ export function useP2PState({
     authorPubkey: string;
     timeoutMs?: number;
   }) => {
-    const allowP2P = settings.p2p.scope === 'everyone' || settings.follows.includes(authorPubkey);
+    const isP2POnly = source.url.startsWith('p2p://');
+    const allowP2P = isP2POnly || settings.p2p.scope === 'everyone' || settings.follows.includes(authorPubkey);
     const result = await mediaAssist.load(source, allowP2P, timeoutMs ?? 2000);
     transportStore.mark(eventId, { [result.source]: true });
     return result;

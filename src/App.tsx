@@ -34,6 +34,8 @@ function Feed() {
   const [pullDistance, setPullDistance] = React.useState(0);
   const [pullReady, setPullReady] = React.useState(false);
   const pullStartRef = useRef<number | null>(null);
+  const wheelPullRef = useRef<number>(0);
+  const wheelTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (location.pathname !== '/') return;
@@ -76,6 +78,23 @@ function Feed() {
         pullStartRef.current = null;
         setPullDistance(0);
         setPullReady(false);
+      }}
+      onWheel={(event) => {
+        const scroller = scrollerRef.current;
+        if (!scroller || scroller.scrollTop > 0) return;
+        if (event.deltaY >= 0) return;
+        const next = Math.min(120, wheelPullRef.current + Math.abs(event.deltaY));
+        wheelPullRef.current = next;
+        setPullDistance(next);
+        const ready = next > 70;
+        setPullReady(ready);
+        if (wheelTimerRef.current) window.clearTimeout(wheelTimerRef.current);
+        wheelTimerRef.current = window.setTimeout(() => {
+          if (wheelPullRef.current > 70) flushPending();
+          wheelPullRef.current = 0;
+          setPullDistance(0);
+          setPullReady(false);
+        }, 220);
       }}
     >
       <div

@@ -1,9 +1,14 @@
+import { HashWorkerPool, hashOnMain } from './hashWorker';
+
+const workerPool = new HashWorkerPool();
+const WORKER_THRESHOLD_BYTES = 1024 * 1024 * 2;
+
 export async function sha256Hex(data: ArrayBuffer | Uint8Array): Promise<string> {
   const buffer = data instanceof ArrayBuffer ? data : data.slice().buffer;
-  const hash = await crypto.subtle.digest('SHA-256', buffer);
-  return Array.from(new Uint8Array(hash))
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('');
+  if (buffer.byteLength >= WORKER_THRESHOLD_BYTES) {
+    return workerPool.hash(buffer);
+  }
+  return hashOnMain(buffer);
 }
 
 export async function verifySha256(data: ArrayBuffer | Uint8Array, expected?: string): Promise<boolean> {
