@@ -156,12 +156,14 @@ body {
   gap: 12px;
   min-width: 0;
   flex: 1 1 auto;
+  flex-wrap: wrap;
 }
 
 .author-actions {
   display: inline-flex;
   gap: 6px;
   margin-left: 8px;
+  flex-wrap: wrap;
 }
 
 .post-avatar {
