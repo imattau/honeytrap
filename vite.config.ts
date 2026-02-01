@@ -17,10 +17,6 @@ export default defineConfig({
       includeAssets: [
         'robots.txt',
         'favicon.svg',
-        'assets/honeytrap_logo_64.png',
-        'assets/honeytrap_logo_192.png',
-        'assets/honeytrap_logo_256.png',
-        'assets/honeytrap_logo_512.png',
         'offline.html'
       ],
       workbox: {
