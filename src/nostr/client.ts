@@ -162,6 +162,18 @@ export class NostrClient implements NostrClientApi {
     return list;
   }
 
+  async fetchListEvent(pubkey: string, listId: string, kind = 30000): Promise<NostrEvent | undefined> {
+    const events = await this.safeQuerySync({
+      kinds: [kind],
+      authors: [pubkey],
+      '#d': [listId],
+      limit: 1
+    });
+    const latest = (events as NostrEvent[])
+      .sort((a, b) => b.created_at - a.created_at)[0];
+    return latest;
+  }
+
   async fetchEventById(id: string): Promise<NostrEvent | undefined> {
     const cached = await this.cache?.getEvent(id);
     if (cached) return cached;

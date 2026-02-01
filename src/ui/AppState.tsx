@@ -22,6 +22,9 @@ import { AuthorService } from '../nostr/author';
 import { MediaRelayListService } from '../nostr/lists';
 import { MagnetBuilder } from '../p2p/magnetBuilder';
 import { MediaUploadService } from '../nostr/mediaUpload';
+import { TorrentRegistry, type TorrentSnapshot } from '../p2p/registry';
+import { Nip44Cipher } from '../nostr/nip44';
+import { TorrentListService } from '../nostr/torrentList';
 
 interface AppStateValue {
   settings: AppSettings;
@@ -97,12 +100,14 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   const [selfProfile, setSelfProfile] = useState<ProfileMetadata | undefined>(undefined);
   const [paused, setPaused] = useState(true);
   const [transport, setTransport] = useState<Record<string, TransportStatus>>({});
+  const [torrentSnapshot, setTorrentSnapshot] = useState<TorrentSnapshot>({});
 
   const nostr = useMemo(() => new NostrClient(), []);
   const settingsStore = useMemo(() => new SettingsStore(defaultSettings), []);
   const transportStore = useMemo(() => new TransportStore(), []);
-  const mediaAssist = useMemo(() => new MediaAssist(defaultSettings.p2p), []);
-  const magnetBuilder = useMemo(() => new MagnetBuilder(defaultSettings.p2p), []);
+  const torrentRegistry = useMemo(() => new TorrentRegistry(), []);
+  const mediaAssist = useMemo(() => new MediaAssist(defaultSettings.p2p, torrentRegistry), [torrentRegistry]);
+  const magnetBuilder = useMemo(() => new MagnetBuilder(defaultSettings.p2p, torrentRegistry), [torrentRegistry]);
   const nostrCache = useMemo(() => new NostrCache(), []);
   const blockedRef = useRef<string[]>([]);
   const socialFetchRef = useRef({ followersAt: 0, followingAt: 0, relaysAt: 0, mediaRelaysAt: 0 });
@@ -121,6 +126,11 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     [nostr, transportStore]
   );
   const signer = useMemo(() => new EventSigner(() => keys, () => nip46SessionRef.current), [keys]);
+  const nip44Cipher = useMemo(() => new Nip44Cipher(() => keys), [keys]);
+  const torrentListService = useMemo(
+    () => new TorrentListService(nostr, signer, nip44Cipher),
+    [nostr, signer, nip44Cipher]
+  );
   const publishService = useMemo(() => new PublishService(nostr, signer), [nostr, signer]);
   const zapService = useMemo(() => new ZapService(signer), [signer]);
   const mediaRelayService = useMemo(() => new MediaRelayListService(nostr, signer), [nostr, signer]);
@@ -168,6 +178,47 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     const unsubscribe = transportStore.subscribe(setTransport);
     return () => unsubscribe();
   }, [transportStore]);
+
+  useEffect(() => {
+    const unsubscribe = torrentRegistry.subscribe(setTorrentSnapshot);
+    return () => unsubscribe();
+  }, [torrentRegistry]);
+
+  const torrentsHydratedRef = useRef(false);
+  useEffect(() => {
+    if (!keys?.npub) {
+      torrentsHydratedRef.current = false;
+      return;
+    }
+    if (torrentsHydratedRef.current) return;
+    let active = true;
+    torrentListService.load(keys.npub)
+      .then((items) => {
+        if (!active) return;
+        if (items.length > 0) torrentRegistry.setAll(items);
+        torrentsHydratedRef.current = true;
+      })
+      .catch(() => null);
+    return () => {
+      active = false;
+    };
+  }, [keys?.npub, torrentListService, torrentRegistry]);
+
+  const torrentPublishRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (!keys?.npub) return;
+    const items = Object.values(torrentSnapshot)
+      .sort((a, b) => b.updatedAt - a.updatedAt)
+      .slice(0, 100);
+    if (items.length === 0) return;
+    if (torrentPublishRef.current) window.clearTimeout(torrentPublishRef.current);
+    torrentPublishRef.current = window.setTimeout(() => {
+      torrentListService.publish(items).catch(() => null);
+    }, 10_000);
+    return () => {
+      if (torrentPublishRef.current) window.clearTimeout(torrentPublishRef.current);
+    };
+  }, [keys?.npub, torrentSnapshot, torrentListService]);
 
   useEffect(() => {
     nostrCache.purgeExpired().catch(() => null);
@@ -434,8 +485,12 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
       eventTags
     );
     await publishService.publishSigned(finalSigned);
+    const seeded = Boolean(eventAssist.magnet) || withMediaAssist.some((item) => item.magnet);
+    if (seeded) {
+      transportStore.mark(finalSigned.id, { p2p: true });
+    }
     return finalSigned;
-  }, [magnetBuilder, publishService, settings.p2p.enabled]);
+  }, [magnetBuilder, publishService, settings.p2p.enabled, transportStore]);
 
   const saveMediaRelays = useCallback(async (urls: string[]) => {
     updateSettings({ ...settings, mediaRelays: urls });

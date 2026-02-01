@@ -4,6 +4,7 @@ import type { NostrEvent } from '../nostr/types';
 import { canonicaliseEvent } from './canonical';
 import { sha256Hex } from './verify';
 import type { P2PSettings } from '../storage/types';
+import type { TorrentRegistry } from './registry';
 
 export interface MagnetResult {
   magnet?: string;
@@ -13,7 +14,7 @@ export interface MagnetResult {
 export class MagnetBuilder {
   private client?: WebTorrent;
 
-  constructor(private settings: P2PSettings) {
+  constructor(private settings: P2PSettings, private registry?: TorrentRegistry) {
     if (settings.enabled) {
       this.client = new WebTorrent({
         tracker: { announce: settings.trackers }
@@ -63,6 +64,28 @@ export class MagnetBuilder {
         this.client!.seed(file, (seeded) => resolve(seeded)).on('error', reject);
       });
       const magnet = torrent.magnetURI;
+      if (magnet) {
+        this.registry?.start({
+          magnet,
+          mode: 'seed',
+          name: torrent.name
+        });
+        const update = () => {
+          this.registry?.update(magnet, {
+            peers: torrent.numPeers,
+            progress: torrent.progress,
+            downloaded: torrent.downloaded,
+            uploaded: torrent.uploaded
+          });
+        };
+        torrent.on('download', update);
+        torrent.on('upload', update);
+        torrent.on('wire', update);
+        torrent.on('noPeers', update);
+        torrent.on('done', update);
+        torrent.on('error', () => this.registry?.finish(magnet));
+        torrent.on('close', () => this.registry?.finish(magnet));
+      }
       if (!this.settings.seedWhileOpen) torrent.destroy();
       return magnet;
     } catch {

@@ -218,7 +218,8 @@ body {
 }
 
 .icon-button--static {
-  pointer-events: none;
+  pointer-events: auto;
+  cursor: default;
 }
 
 .icon-button--neon {
