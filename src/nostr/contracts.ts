@@ -36,6 +36,7 @@ export interface NostrCacheApi {
   setProfile(pubkey: string, profile: ProfileMetadata): Promise<void>;
   getEvent(id: string): Promise<NostrEvent | undefined>;
   setEvent(event: NostrEvent): Promise<void>;
+  setEvents(events: NostrEvent[]): Promise<void>;
   getReplies(eventId: string): Promise<NostrEvent[] | undefined>;
   setReplies(eventId: string, events: NostrEvent[]): Promise<void>;
   getFollowers(pubkey: string): Promise<string[] | undefined>;

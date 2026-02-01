@@ -84,6 +84,7 @@ export class NostrClient implements NostrClientApi {
     const events = await this.safeQuerySync({ kinds: [1], '#e': [eventId], limit: 50 });
     const list = events as NostrEvent[];
     await this.cache?.setReplies(eventId, list);
+    await this.cache?.setEvents(list);
     return list;
   }
 
@@ -202,6 +203,7 @@ export class NostrClient implements NostrClientApi {
     if (authors && authors.length > 0) filter.authors = authors;
     if (tags && tags.length > 0) filter['#t'] = tags.map((tag) => tag.trim().replace(/^#/, '').toLowerCase()).filter(Boolean);
     const events = await this.safeQuerySync(filter);
+    await this.cache?.setEvents(events as NostrEvent[]);
     return events as NostrEvent[];
   }
 

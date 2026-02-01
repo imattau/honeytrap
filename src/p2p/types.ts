@@ -12,3 +12,8 @@ export interface AssistResult {
   source: 'p2p' | 'http';
   data: ArrayBuffer;
 }
+
+export interface MediaAssistResult {
+  url: string;
+  source: 'p2p' | 'http';
+}

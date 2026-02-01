@@ -43,12 +43,12 @@ function makeEvent(id: string): NostrEvent {
   };
 }
 
-describe('NostrCache recent events', () => {
-  it('stores and retrieves recent feed events', async () => {
+describe('NostrCache batch event caching', () => {
+  it('stores events via setEvents', async () => {
     const cache = new NostrCache();
     const events = [makeEvent('a'), makeEvent('b')];
-    await cache.setRecentEvents(events);
-    const fetched = await cache.getRecentEvents();
-    expect(fetched?.map((e) => e.id)).toEqual(['a', 'b']);
+    await cache.setEvents(events);
+    const fetched = await Promise.all(events.map((event) => cache.getEvent(event.id)));
+    expect(fetched.map((event) => event?.id)).toEqual(['a', 'b']);
   });
 });

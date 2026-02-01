@@ -1,5 +1,6 @@
 import type { NostrEvent, ProfileMetadata } from './types';
 import { CacheStore } from '../storage/cache';
+import { EventStore } from '../storage/eventStore';
 
 const TTL_PROFILE = 6 * 60 * 60 * 1000;
 const TTL_EVENT = 60 * 60 * 1000;
@@ -20,6 +21,7 @@ export class NostrCache implements NostrCacheApi {
   private relayList = new CacheStore<string[]>({ maxEntries: 200, evictionPolicy: 'fifo' });
   private mediaRelayList = new CacheStore<string[]>({ maxEntries: 200, evictionPolicy: 'fifo' });
   private recentEvents = new CacheStore<NostrEvent[]>({ maxEntries: 20, evictionPolicy: 'lru' });
+  private eventStore = new EventStore({ recentLimit: 150 });
 
   async getProfile(pubkey: string) {
     return this.profiles.get(`profile:${pubkey}`);
@@ -35,6 +37,10 @@ export class NostrCache implements NostrCacheApi {
 
   async setEvent(event: NostrEvent) {
     await this.events.set(`event:${event.id}`, event, TTL_EVENT);
+  }
+
+  async setEvents(events: NostrEvent[]) {
+    await Promise.all(events.map((event) => this.setEvent(event)));
   }
 
   async getReplies(eventId: string) {
@@ -78,11 +84,19 @@ export class NostrCache implements NostrCacheApi {
   }
 
   async getRecentEvents() {
-    return this.recentEvents.get('recent:feed');
+    const cached = await this.recentEvents.get('recent:feed');
+    if (cached && cached.length > 0) return cached;
+    const stored = await this.eventStore.loadRecent();
+    if (stored.length > 0) {
+      await this.recentEvents.set('recent:feed', stored, TTL_RECENT);
+      return stored;
+    }
+    return undefined;
   }
 
   async setRecentEvents(events: NostrEvent[]) {
     await this.recentEvents.set('recent:feed', events, TTL_RECENT);
+    await this.eventStore.saveRecent(events);
   }
 
   async purgeExpired() {

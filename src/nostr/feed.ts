@@ -164,6 +164,7 @@ export class FeedOrchestrator implements FeedOrchestratorApi {
     unique.forEach((event) => this.transport?.mark(event.id, { relay: true, verified: verifyEvent(event as any) }));
     const merged = this.mergeEvents(getEvents(), unique);
     onUpdate(merged);
+    this.cache?.setEvents(unique).catch(() => null);
     this.cache?.setRecentEvents(merged.slice(0, 120)).catch(() => null);
   }
 
@@ -210,6 +211,9 @@ export class FeedOrchestrator implements FeedOrchestratorApi {
     if (this.pending.length === 0) return existing;
     const incoming = this.pending.splice(0, this.pending.length)
       .filter((event) => !this.isBlocked?.(event.pubkey));
+    if (incoming.length > 0) {
+      this.cache?.setEvents(incoming).catch(() => null);
+    }
     const merged = this.mergeEvents(existing, incoming);
     this.cache?.setRecentEvents(merged.slice(0, 120)).catch(() => null);
     return merged;

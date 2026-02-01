@@ -3,6 +3,18 @@ import { MediaAssist } from '../src/p2p/mediaAssist';
 import { WebTorrentAssist } from '../src/p2p/webtorrent';
 import type { AssistSource } from '../src/p2p/types';
 
+vi.mock('../src/p2p/mediaBlobCache', () => {
+  class MediaBlobCache {
+    async get() {
+      return undefined;
+    }
+    async set() {
+      return;
+    }
+  }
+  return { MediaBlobCache };
+});
+
 const fetchSpy = vi.fn(async () => ({
   arrayBuffer: async () => new TextEncoder().encode('data').buffer
 }));

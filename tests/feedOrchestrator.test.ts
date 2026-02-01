@@ -45,7 +45,8 @@ describe('FeedOrchestrator filtering', () => {
 
   it('invokes event assist for accepted events', () => {
     (globalThis as any).window = {
-      setTimeout: (fn: () => void, ms?: number) => setTimeout(fn, ms)
+      setTimeout: (fn: () => void, ms?: number) => setTimeout(fn, ms),
+      clearTimeout: (id: number) => clearTimeout(id)
     };
     const service = new FakeService();
     const client = new FakeClient();
@@ -63,5 +64,33 @@ describe('FeedOrchestrator filtering', () => {
     service.onEvent?.(makeEvent('1', 'alice'));
 
     expect(assist).toHaveBeenCalledTimes(1);
+  });
+
+  it('caches incoming events when flushed', () => {
+    (globalThis as any).window = {
+      setTimeout: (fn: () => void, ms?: number) => setTimeout(fn, ms),
+      clearTimeout: (id: number) => clearTimeout(id)
+    };
+    const service = new FakeService();
+    const client = new FakeClient();
+    const cache = {
+      getRecentEvents: vi.fn(async () => []),
+      setRecentEvents: vi.fn(async () => undefined),
+      setEvents: vi.fn(async () => undefined)
+    };
+    const orchestrator = new FeedOrchestrator(client as any, service as any, undefined, undefined, undefined, cache as any);
+    const updates: NostrEvent[][] = [];
+
+    orchestrator.subscribe(
+      { follows: ['alice'], followers: [], feedMode: 'follows' },
+      () => [],
+      (next) => updates.push(next),
+      () => null
+    );
+
+    const event = makeEvent('1', 'alice');
+    service.onEvent?.(event);
+
+    expect(cache.setEvents).toHaveBeenCalledWith([event]);
   });
 });
