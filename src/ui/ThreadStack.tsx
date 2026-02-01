@@ -38,23 +38,20 @@ export function ThreadStack() {
     setLoading(true);
     const stateEvent = (location.state as { event?: NostrEvent } | undefined)?.event;
     const cached = findEventById(id);
+    const fallback = stateEvent ?? cached;
+    if (fallback) {
+      setNodes([{ event: fallback, depth: 0, role: 'target' }]);
+      setLoading(false);
+    }
     loadThread(id)
       .then((loaded) => {
         if (loaded.length > 0) {
           setNodes(loaded);
           return;
         }
-        const fallback = stateEvent ?? cached;
-        if (fallback) {
-          setNodes([{ event: fallback, depth: 0, role: 'target' }]);
-        }
         setLoading(false);
       })
       .catch(() => {
-        const fallback = stateEvent ?? cached;
-        if (fallback) {
-          setNodes([{ event: fallback, depth: 0, role: 'target' }]);
-        }
         setLoading(false);
       });
   }, [id, loadThread, location.state, findEventById]);
