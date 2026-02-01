@@ -41,6 +41,7 @@ export function useFeedState({
 
   const eventsRef = useRef<NostrEvent[]>([]);
   const feedLoadingRef = useRef(false);
+  const replaceOnNextUpdateRef = useRef(false);
 
   const setFeedLoadingSafe = useCallback((value: boolean) => {
     feedLoadingRef.current = value;
@@ -53,14 +54,20 @@ export function useFeedState({
 
   const subscribeFeed = useCallback(() => {
     eventsRef.current = [];
-    setEvents([]);
     setPendingCount(0);
     setFeedLoadingSafe(true);
+    replaceOnNextUpdateRef.current = true;
     orchestrator.subscribe(
       { follows: settings.follows, followers, feedMode: settings.feedMode, listId: settings.selectedListId },
       () => eventsRef.current,
       (next) => {
-        setEvents(next);
+        if (replaceOnNextUpdateRef.current) {
+          replaceOnNextUpdateRef.current = false;
+          eventsRef.current = next;
+          setEvents(next);
+        } else {
+          setEvents(next);
+        }
         if (feedLoadingRef.current) setFeedLoadingSafe(false);
       },
       setProfiles,
