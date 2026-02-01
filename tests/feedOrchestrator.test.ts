@@ -117,4 +117,24 @@ describe('FeedOrchestrator filtering', () => {
     expect(transport.mark).toHaveBeenNthCalledWith(1, '1', { relay: true });
     expect(transport.mark).toHaveBeenNthCalledWith(2, '1', { verified: true });
   });
+
+  it('notifies pending count once per accepted event', () => {
+    const service = new FakeService();
+    const client = new FakeClient();
+    const orchestrator = new FeedOrchestrator(client as any, service as any);
+    const onPending = vi.fn();
+
+    orchestrator.subscribe(
+      { follows: ['alice'], followers: [], feedMode: 'follows' },
+      () => [],
+      () => null,
+      () => null,
+      onPending
+    );
+
+    service.onEvent?.(makeEvent('1', 'alice'));
+
+    expect(onPending).toHaveBeenCalledTimes(1);
+    expect(onPending).toHaveBeenCalledWith(1);
+  });
 });

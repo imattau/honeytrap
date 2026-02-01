@@ -112,11 +112,10 @@ export class FeedOrchestrator implements FeedOrchestratorApi {
         this.markTransport(event);
         this.onEventAssist?.(event);
         this.pending.push(event);
-        onPending?.(this.pending.length);
         if (this.pending.length > MAX_BUFFER) {
           this.pending.length = MAX_BUFFER;
-          onPending?.(this.pending.length);
         }
+        onPending?.(this.pending.length);
         this.profileQueue.add(event.pubkey);
         if (!this.hydrated) {
           const merged = this.flush(getEvents());
@@ -126,7 +125,6 @@ export class FeedOrchestrator implements FeedOrchestratorApi {
           const merged = this.flush(getEvents());
           onUpdate(merged);
         }
-        onPending?.(this.pending.length);
         this.drainProfiles(onProfiles);
       }
     });

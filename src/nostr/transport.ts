@@ -51,8 +51,10 @@ export class TransportStore implements TransportStoreApi {
   }
 
   private emit(id?: string) {
-    const snapshot = this.snapshot();
-    this.listeners.forEach((listener) => listener(snapshot));
+    if (this.listeners.size > 0) {
+      const snapshot = this.snapshot();
+      this.listeners.forEach((listener) => listener(snapshot));
+    }
     if (!id) return;
     this.keyListeners.get(id)?.forEach((listener) => listener());
   }

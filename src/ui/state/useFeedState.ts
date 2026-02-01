@@ -45,6 +45,8 @@ export function useFeedState({
   const eventsRef = useRef<NostrEvent[]>([]);
   const feedLoadingRef = useRef(false);
   const replaceOnNextUpdateRef = useRef(false);
+  const pendingCountRef = useRef(0);
+  const pendingTimerRef = useRef<number | null>(null);
 
   const setFeedLoadingSafe = useCallback((value: boolean) => {
     feedLoadingRef.current = value;
@@ -55,8 +57,26 @@ export function useFeedState({
     eventsRef.current = events;
   }, [events]);
 
+  useEffect(() => {
+    return () => {
+      if (pendingTimerRef.current) {
+        window.clearTimeout(pendingTimerRef.current);
+      }
+    };
+  }, []);
+
+  const setPendingCountBatched = useCallback((next: number) => {
+    pendingCountRef.current = next;
+    if (pendingTimerRef.current) return;
+    pendingTimerRef.current = window.setTimeout(() => {
+      pendingTimerRef.current = null;
+      setPendingCount(pendingCountRef.current);
+    }, 120);
+  }, []);
+
   const subscribeFeed = useCallback(() => {
     eventsRef.current = [];
+    pendingCountRef.current = 0;
     setPendingCount(0);
     setFeedLoadingSafe(true);
     replaceOnNextUpdateRef.current = true;
@@ -74,9 +94,9 @@ export function useFeedState({
         if (feedLoadingRef.current) setFeedLoadingSafe(false);
       },
       setProfiles,
-      setPendingCount
+      setPendingCountBatched
     );
-  }, [orchestrator, settings.follows, settings.selectedListId, settings.feedMode, followers, setFeedLoadingSafe]);
+  }, [orchestrator, settings.follows, settings.selectedListId, settings.feedMode, followers, setFeedLoadingSafe, setPendingCountBatched]);
 
   useEffect(() => {
     orchestrator.stop();
@@ -103,6 +123,11 @@ export function useFeedState({
       setEvents(next);
     };
     orchestrator.flushPending(() => eventsRef.current, apply);
+    pendingCountRef.current = 0;
+    if (pendingTimerRef.current) {
+      window.clearTimeout(pendingTimerRef.current);
+      pendingTimerRef.current = null;
+    }
     setPendingCount(0);
   };
 
