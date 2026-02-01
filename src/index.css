@@ -449,6 +449,10 @@ body {
   border-bottom: 1px solid #1b222c;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
   backdrop-filter: blur(16px);
+  max-height: 100vh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
 }
 
 .top-drawer.open {
