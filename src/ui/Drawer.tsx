@@ -11,9 +11,11 @@ import { WalletSection } from './menu/WalletSection';
 import { SignOutSection } from './menu/SignOutSection';
 import { MenuSection } from './menu/MenuSection';
 import { MenuPill } from './menu/MenuPill';
+import { useNavigate } from 'react-router-dom';
 import type { AppSettings } from '../storage/types';
 
 export function Drawer() {
+  const navigate = useNavigate();
   const {
     settings,
     setSettings,
@@ -281,7 +283,18 @@ export function Drawer() {
           <div className="menu-stack">
             <MenuSection title="Author" icon={<UserCircle size={16} />} collapsible={false}>
               {selfProfile ? (
-                <div className="drawer-author">
+                <div
+                  className="drawer-author"
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => keys?.npub && navigate(`/author/${keys.npub}`)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault();
+                      if (keys?.npub) navigate(`/author/${keys.npub}`);
+                    }
+                  }}
+                >
                   {selfProfile.picture ? (
                     <img src={selfProfile.picture} alt="avatar" className="drawer-avatar" />
                   ) : (
