@@ -12,7 +12,7 @@ class FakeService {
 
 class FakeClient {}
 
-function makeEvent(id: string, pubkey: string): NostrEvent {
+function makeEvent(id: string, pubkey: string, patch: Partial<NostrEvent> = {}): NostrEvent {
   return {
     id,
     pubkey,
@@ -20,7 +20,8 @@ function makeEvent(id: string, pubkey: string): NostrEvent {
     kind: 1,
     tags: [],
     content: 'hi',
-    sig: 'sig'
+    sig: 'sig',
+    ...patch
   };
 }
 
@@ -136,5 +137,62 @@ describe('FeedOrchestrator filtering', () => {
 
     expect(onPending).toHaveBeenCalledTimes(1);
     expect(onPending).toHaveBeenCalledWith(1);
+  });
+
+  it('keeps only latest version for addressable posts', () => {
+    const service = new FakeService();
+    const client = new FakeClient();
+    const orchestrator = new FeedOrchestrator(client as any, service as any);
+    const updates: NostrEvent[][] = [];
+
+    orchestrator.subscribe(
+      { follows: ['alice'], followers: [], feedMode: 'follows' },
+      () => [],
+      (next) => updates.push(next),
+      () => null
+    );
+
+    const older = makeEvent('old', 'alice', {
+      kind: 30023,
+      created_at: 100,
+      tags: [['d', 'post-1']]
+    });
+    const newer = makeEvent('new', 'alice', {
+      kind: 30023,
+      created_at: 200,
+      tags: [['d', 'post-1']]
+    });
+
+    service.onEvent?.(older);
+    service.onEvent?.(newer);
+
+    const last = updates[updates.length - 1] ?? [];
+    expect(last.filter((event) => event.kind === 30023)).toHaveLength(1);
+    expect(last[0]?.id).toBe('new');
+  });
+
+  it('buffers while paused and flushes on resume', () => {
+    const service = new FakeService();
+    const client = new FakeClient();
+    const orchestrator = new FeedOrchestrator(client as any, service as any);
+    const updates: NostrEvent[][] = [];
+
+    orchestrator.subscribe(
+      { follows: ['alice'], followers: [], feedMode: 'follows' },
+      () => [],
+      (next) => updates.push(next),
+      () => null
+    );
+
+    service.onEvent?.(makeEvent('hydration', 'alice'));
+    expect(updates.length).toBe(1);
+
+    orchestrator.setPaused(true);
+    service.onEvent?.(makeEvent('buffered', 'alice'));
+    expect(updates.length).toBe(1);
+
+    orchestrator.setPaused(false);
+    expect(updates.length).toBe(2);
+    expect(updates[1]?.some((event) => event.id === 'buffered')).toBe(true);
   });
 });

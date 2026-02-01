@@ -26,7 +26,8 @@ function Feed() {
     publishReply,
     mediaRelayList,
     settings,
-    attachMedia
+    attachMedia,
+    setPaused
   } = useAppState();
   const [composerOpen, setComposerOpen] = useState(false);
   const [replyTarget, setReplyTarget] = useState<NostrEvent | undefined>(undefined);
@@ -39,6 +40,13 @@ function Feed() {
   const pullStartRef = useRef<number | null>(null);
   const wheelPullRef = useRef<number>(0);
   const wheelTimerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    setPaused(false);
+    return () => {
+      setPaused(true);
+    };
+  }, [setPaused]);
 
   useEffect(() => {
     if (location.pathname !== '/') return;

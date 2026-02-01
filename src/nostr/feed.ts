@@ -26,6 +26,7 @@ export class FeedOrchestrator implements FeedOrchestratorApi {
   private lastGetEvents?: () => NostrEvent[];
   private lastOnUpdate?: (events: NostrEvent[]) => void;
   private lastOnProfiles?: (profiles: Record<string, ProfileMetadata>) => void;
+  private lastOnPending?: (count: number) => void;
 
   constructor(
     private nostr: NostrClient,
@@ -45,7 +46,11 @@ export class FeedOrchestrator implements FeedOrchestratorApi {
   }
 
   setPaused(value: boolean) {
+    const wasPaused = this.paused;
     this.paused = value;
+    if (wasPaused && !value) {
+      this.resumeIfBuffered();
+    }
   }
 
   reset() {
@@ -75,6 +80,7 @@ export class FeedOrchestrator implements FeedOrchestratorApi {
     this.lastGetEvents = getEvents;
     this.lastOnUpdate = onUpdate;
     this.lastOnProfiles = onProfiles;
+    this.lastOnPending = onPending;
     const authors = resolveAuthors({ follows, followers, feedMode, listId, lists });
     const authorSet = authors && authors.length > 0 ? new Set(authors) : undefined;
     const normalizedTags = normalizeTags(tags);
@@ -109,6 +115,13 @@ export class FeedOrchestrator implements FeedOrchestratorApi {
         if (normalizedTags.length > 0 && !matchesTag(event, normalizedTags)) return;
         if (this.knownIds.has(event.id)) return;
         this.knownIds.add(event.id);
+        if (this.paused && this.hydrated) {
+          this.pending.push(event);
+          if (this.pending.length > MAX_BUFFER) {
+            this.pending.length = MAX_BUFFER;
+          }
+          return;
+        }
         this.markTransport(event);
         this.onEventAssist?.(event);
         this.pending.push(event);
@@ -135,6 +148,11 @@ export class FeedOrchestrator implements FeedOrchestratorApi {
   }
 
   resumeIfBuffered() {
+    if (!this.lastGetEvents || !this.lastOnUpdate) return;
+    if (this.pending.length === 0) return;
+    const merged = this.flush(this.lastGetEvents());
+    this.lastOnUpdate(merged);
+    this.lastOnPending?.(0);
   }
 
   flushPending(getEvents: () => NostrEvent[], onUpdate: (events: NostrEvent[]) => void) {
@@ -221,10 +239,27 @@ export class FeedOrchestrator implements FeedOrchestratorApi {
   }
 
   private mergeEvents(existing: NostrEvent[], incoming: NostrEvent[]): NostrEvent[] {
-    const merged = [...incoming, ...existing];
-    merged.sort((a, b) => b.created_at - a.created_at);
+    const deduped = new Map<string, NostrEvent>();
+    [...incoming, ...existing].forEach((event) => {
+      const key = eventIdentityKey(event);
+      const current = deduped.get(key);
+      if (!current) {
+        deduped.set(key, event);
+        return;
+      }
+      if (event.created_at > current.created_at) {
+        deduped.set(key, event);
+        return;
+      }
+      if (event.created_at === current.created_at && event.id > current.id) {
+        deduped.set(key, event);
+      }
+    });
+    const merged = Array.from(deduped.values())
+      .sort((a, b) => b.created_at - a.created_at || b.id.localeCompare(a.id))
+      .slice(0, MAX_EVENTS);
     this.oldest = merged[merged.length - 1]?.created_at ?? this.oldest;
-    return merged.slice(0, MAX_EVENTS);
+    return merged;
   }
 
   private markTransport(event: NostrEvent) {
@@ -265,4 +300,16 @@ function matchesTag(event: NostrEvent, tags: string[]) {
   if (tags.length === 0) return true;
   const tagSet = new Set(tags);
   return event.tags.some((tag) => tag[0] === 't' && tag[1] && tagSet.has(tag[1].toLowerCase()));
+}
+
+function eventIdentityKey(event: NostrEvent) {
+  if (isAddressableKind(event.kind)) {
+    const d = event.tags.find((tag) => tag[0] === 'd' && tag[1])?.[1];
+    if (d) return `a:${event.kind}:${event.pubkey}:${d}`;
+  }
+  return `id:${event.id}`;
+}
+
+function isAddressableKind(kind: number) {
+  return kind >= 30000 && kind < 40000;
 }
