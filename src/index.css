@@ -40,13 +40,19 @@ body {
   top: 0;
   left: 0;
   right: 0;
-  height: 2px;
+  height: 3px;
   transform: scaleX(0);
   transform-origin: left;
   background: linear-gradient(90deg, rgba(109, 214, 255, 0.0), rgba(109, 214, 255, 0.9), rgba(109, 214, 255, 0.0));
   opacity: 0;
   transition: opacity 160ms ease, transform 160ms ease;
   z-index: 5;
+}
+
+@media (min-width: 1280px) {
+  .progress-line {
+    height: 4px;
+  }
 }
 
 .progress-line.active {
