@@ -101,6 +101,8 @@ export class FeedOrchestrator implements FeedOrchestratorApi {
       tags,
       onEvent: (event) => {
         if (this.isBlocked?.(event.pubkey)) return;
+        if (authorSet && !authorSet.has(event.pubkey)) return;
+        if (normalizedTags.length > 0 && !matchesTag(event, normalizedTags)) return;
         if (this.knownIds.has(event.id)) return;
         this.knownIds.add(event.id);
         this.transport?.mark(event.id, { relay: true, verified: verifyEvent(event as any) });
