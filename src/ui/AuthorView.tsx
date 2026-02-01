@@ -74,50 +74,52 @@ export function AuthorView() {
   return (
     <div className="author-view">
       <div className={`progress-line ${loading ? 'active' : ''}`} aria-hidden="true" />
-      <div className="author-header">
-        <button className="author-back" onClick={() => navigate(-1)} aria-label="Back">
-          <ArrowLeft size={18} />
-        </button>
-        <div className="author-card">
-          {displayProfile?.picture ? (
-            <img src={displayProfile.picture} alt="avatar" className="author-avatar" />
-          ) : (
-            <img src={fallbackAvatar} alt="avatar" className="author-avatar fallback" />
-          )}
-          <div>
-            <div className="author-name">{displayProfile?.display_name ?? displayProfile?.name ?? resolvedPubkey.slice(0, 12)}</div>
-            <div className="author-sub">{resolvedPubkey}</div>
-            {displayProfile?.about && <div className="author-about">{displayProfile.about}</div>}
-            <div className="author-controls">
-              <IconButton
-                title={followed ? 'Unfollow' : 'Follow'}
-                ariaLabel={followed ? 'Unfollow' : 'Follow'}
-                active={followed}
-                tone="follow"
-                variant="author"
-                onClick={() => resolvedPubkey && toggleFollow(resolvedPubkey)}
-              >
-                {followed ? <UserCheck size={14} /> : <UserPlus size={14} />}
-              </IconButton>
-              <IconButton
-                title={blocked ? 'Unblock' : 'Block'}
-                ariaLabel={blocked ? 'Unblock' : 'Block'}
-                active={blocked}
-                tone="block"
-                variant="author"
-                onClick={() => resolvedPubkey && toggleBlock(resolvedPubkey)}
-              >
-                <Ban size={14} />
-              </IconButton>
-            </div>
-          </div>
-        </div>
-      </div>
       <Virtuoso
         className="feed-virtuoso"
         data={events}
         overscan={600}
         components={{
+          Header: () => (
+            <div className="author-header">
+              <button className="author-back" onClick={() => navigate(-1)} aria-label="Back">
+                <ArrowLeft size={18} />
+              </button>
+              <div className="author-card">
+                {displayProfile?.picture ? (
+                  <img src={displayProfile.picture} alt="avatar" className="author-avatar" />
+                ) : (
+                  <img src={fallbackAvatar} alt="avatar" className="author-avatar fallback" />
+                )}
+                <div>
+                  <div className="author-name">{displayProfile?.display_name ?? displayProfile?.name ?? resolvedPubkey.slice(0, 12)}</div>
+                  <div className="author-sub">{resolvedPubkey}</div>
+                  {displayProfile?.about && <div className="author-about">{displayProfile.about}</div>}
+                  <div className="author-controls">
+                    <IconButton
+                      title={followed ? 'Unfollow' : 'Follow'}
+                      ariaLabel={followed ? 'Unfollow' : 'Follow'}
+                      active={followed}
+                      tone="follow"
+                      variant="author"
+                      onClick={() => resolvedPubkey && toggleFollow(resolvedPubkey)}
+                    >
+                      {followed ? <UserCheck size={14} /> : <UserPlus size={14} />}
+                    </IconButton>
+                    <IconButton
+                      title={blocked ? 'Unblock' : 'Block'}
+                      ariaLabel={blocked ? 'Unblock' : 'Block'}
+                      active={blocked}
+                      tone="block"
+                      variant="author"
+                      onClick={() => resolvedPubkey && toggleBlock(resolvedPubkey)}
+                    >
+                      <Ban size={14} />
+                    </IconButton>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ),
           EmptyPlaceholder: () => (
             <div className="author-empty">
               {loading ? 'Loading posts…' : 'No posts yet.'}
