@@ -30,10 +30,16 @@ export function useP2PState({
   keysNpub?: string;
   transportStore: TransportStore;
 }) {
+  const OWN_AVAILABILITY_MS = 30 * 24 * 60 * 60 * 1000;
+  const OTHER_AVAILABILITY_MS = 7 * 24 * 60 * 60 * 1000;
+  const RESEED_INTERVAL_MS = 10 * 60 * 1000;
+
   const [torrentSnapshot, setTorrentSnapshot] = useState<TorrentSnapshot>({});
   const [canEncryptNip44, setCanEncryptNip44] = useState(false);
   const settingsRef = useRef(settings);
   const keysRef = useRef(keysNpub);
+  const torrentSnapshotRef = useRef(torrentSnapshot);
+  const reseedAtRef = useRef(new Map<string, number>());
 
   const torrentRegistry = useMemo(() => new TorrentRegistry(), []);
   const webtorrentHub = useMemo(() => new WebTorrentHub(settings.p2p), []);
@@ -83,6 +89,10 @@ export function useP2PState({
   }, [torrentRegistry]);
 
   useEffect(() => {
+    torrentSnapshotRef.current = torrentSnapshot;
+  }, [torrentSnapshot]);
+
+  useEffect(() => {
     if (!keysNpub) {
       torrentSync.reset();
       return;
@@ -113,6 +123,40 @@ export function useP2PState({
     return () => window.clearInterval(timer);
   }, [torrentRegistry]);
 
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      if (!settingsRef.current.p2p.enabled) return;
+      const now = Date.now();
+      const snapshot = torrentSnapshotRef.current;
+      Object.values(snapshot).forEach((item) => {
+        if (item.mode !== 'fetch') return;
+        if (!item.availableUntil || now > item.availableUntil) return;
+        if (!item.url || !item.url.startsWith('http')) return;
+        if (item.active && item.peers > 0) return;
+        const lastReseed = reseedAtRef.current.get(item.magnet) ?? 0;
+        if (now - lastReseed < RESEED_INTERVAL_MS) return;
+        const currentSettings = settingsRef.current;
+        const currentKeys = keysRef.current;
+        const isSelf = Boolean(currentKeys && item.authorPubkey === currentKeys);
+        const allowP2P = isSelf || currentSettings.p2p.scope === 'everyone'
+          || currentSettings.follows.includes(item.authorPubkey ?? '');
+        if (!allowP2P) return;
+        reseedAtRef.current.set(item.magnet, now);
+        const source: AssistSource = {
+          url: item.url,
+          magnet: item.magnet,
+          sha256: undefined,
+          type: 'media',
+          eventId: item.eventId,
+          authorPubkey: item.authorPubkey,
+          availableUntil: item.availableUntil
+        };
+        mediaAssist.ensureWebSeed(source, allowP2P);
+      });
+    }, RESEED_INTERVAL_MS);
+    return () => window.clearInterval(timer);
+  }, [mediaAssist]);
+
   const loadMedia = async ({
     eventId,
     source,
@@ -127,8 +171,22 @@ export function useP2PState({
     const isP2POnly = source.url.startsWith('p2p://');
     const isSelf = Boolean(keysNpub && authorPubkey === keysNpub);
     const allowP2P = isP2POnly || isSelf || settings.p2p.scope === 'everyone' || settings.follows.includes(authorPubkey);
-    const result = await mediaAssist.load(source, allowP2P, timeoutMs ?? 2000);
+    const availabilityMs = isSelf ? OWN_AVAILABILITY_MS : OTHER_AVAILABILITY_MS;
+    const availableUntil = source.magnet && source.url.startsWith('http')
+      ? Date.now() + availabilityMs
+      : undefined;
+    const assistSource: AssistSource = {
+      ...source,
+      eventId,
+      authorPubkey,
+      availableUntil
+    };
+    const shouldReseed = settings.p2p.enabled && allowP2P && Boolean(source.magnet) && source.url.startsWith('http');
+    const result = await mediaAssist.load(assistSource, allowP2P, timeoutMs ?? 2000);
     transportStore.mark(eventId, { [result.source]: true });
+    if (result.source === 'http' && shouldReseed) {
+      transportStore.mark(eventId, { p2p: true });
+    }
     return result;
   };
 

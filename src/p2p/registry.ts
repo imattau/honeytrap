@@ -5,7 +5,9 @@ export interface TorrentStatus {
   mode: TorrentMode;
   name?: string;
   eventId?: string;
+  authorPubkey?: string;
   url?: string;
+  availableUntil?: number;
   addedAt: number;
   updatedAt: number;
   peers: number;
@@ -38,7 +40,9 @@ export class TorrentRegistry {
     mode: TorrentMode;
     name?: string;
     eventId?: string;
+    authorPubkey?: string;
     url?: string;
+    availableUntil?: number;
   }) {
     const now = Date.now();
     const existing = this.items.get(input.magnet);
@@ -47,7 +51,9 @@ export class TorrentRegistry {
       mode: input.mode,
       name: input.name ?? existing?.name,
       eventId: input.eventId ?? existing?.eventId,
+      authorPubkey: input.authorPubkey ?? existing?.authorPubkey,
       url: input.url ?? existing?.url,
+      availableUntil: input.availableUntil ?? existing?.availableUntil,
       addedAt: existing?.addedAt ?? now,
       updatedAt: now,
       peers: existing?.peers ?? 0,
@@ -93,9 +99,10 @@ export class TorrentRegistry {
     const now = Date.now();
     let changed = false;
     this.items.forEach((value, key) => {
+      const expired = value.availableUntil !== undefined && now > value.availableUntil;
       const inactiveStale = !value.active && now - value.updatedAt > this.maxAgeMs;
       const longLived = now - value.addedAt > this.maxAgeMs * 2;
-      if (inactiveStale || longLived) {
+      if (expired || inactiveStale || longLived) {
         this.items.delete(key);
         changed = true;
       }

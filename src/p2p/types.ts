@@ -3,6 +3,9 @@ export interface AssistSource {
   url: string;
   sha256?: string;
   type: 'media' | 'event';
+  eventId?: string;
+  authorPubkey?: string;
+  availableUntil?: number;
 }
 
 export interface AssistResult {

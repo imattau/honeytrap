@@ -15,6 +15,7 @@ export interface TorrentSettings {
 export class WebTorrentAssist {
   private hub?: WebTorrentHub;
   private active = 0;
+  private tracked = new WeakSet<Torrent>();
 
   constructor(private settings: TorrentSettings, private registry?: TorrentRegistry, hub?: WebTorrentHub) {
     this.hub = hub;
@@ -41,6 +42,28 @@ export class WebTorrentAssist {
     const verified = await verifySha256(data, source.sha256);
     if (!verified) throw new Error('HTTP sha256 mismatch');
     return { source: 'http', data };
+  }
+
+  ensureWebSeed(source: AssistSource, allowP2P: boolean) {
+    if (!allowP2P || !this.settings.enabled) return;
+    if (!source.magnet || source.type !== 'media') return;
+    if (!source.url.startsWith('http')) return;
+    if (!this.hub?.getClient()) return;
+    const magnet = source.magnet;
+    const webSeeds = [source.url];
+    this.registry?.start({
+      magnet,
+      mode: 'fetch',
+      name: undefined,
+      eventId: source.eventId,
+      authorPubkey: source.authorPubkey,
+      url: source.url,
+      availableUntil: source.availableUntil
+    });
+    this.hub.ensure(magnet, (torrent: Torrent) => {
+      this.registry?.update(magnet, { name: torrent.name });
+      this.trackTorrent(magnet, torrent);
+    }, { webSeeds });
   }
 
   private async fetchViaTorrent(source: AssistSource, timeoutMs: number): Promise<ArrayBuffer | undefined> {
@@ -91,23 +114,12 @@ export class WebTorrentAssist {
           magnet,
           mode: 'fetch',
           name: torrent.name,
-          url: source.url
+          eventId: source.eventId,
+          authorPubkey: source.authorPubkey,
+          url: source.url,
+          availableUntil: source.availableUntil
         });
-        const update = () => {
-          this.registry?.update(magnet, {
-            peers: torrent.numPeers,
-            progress: torrent.progress,
-            downloaded: torrent.downloaded,
-            uploaded: torrent.uploaded
-          });
-        };
-        torrent.on('download', update);
-        torrent.on('upload', update);
-        torrent.on('wire', update);
-        torrent.on('noPeers', update);
-        torrent.on('done', update);
-        torrent.on('error', () => this.registry?.finish(magnet));
-        torrent.on('close', () => this.registry?.finish(magnet));
+        this.trackTorrent(magnet, torrent);
         const onReady = () => {
           clearTimeout(timer);
           resolve(torrent);
@@ -116,5 +128,26 @@ export class WebTorrentAssist {
         else torrent.once('ready', onReady);
       }, webSeeds ? { webSeeds } : undefined);
     });
+  }
+
+  private trackTorrent(magnet: string, torrent: Torrent) {
+    if (this.tracked.has(torrent)) return;
+    this.tracked.add(torrent);
+    const update = () => {
+      this.registry?.update(magnet, {
+        peers: torrent.numPeers,
+        progress: torrent.progress,
+        downloaded: torrent.downloaded,
+        uploaded: torrent.uploaded
+      });
+    };
+    update();
+    torrent.on('download', update);
+    torrent.on('upload', update);
+    torrent.on('wire', update);
+    torrent.on('noPeers', update);
+    torrent.on('done', update);
+    torrent.on('error', () => this.registry?.finish(magnet));
+    torrent.on('close', () => this.registry?.finish(magnet));
   }
 }

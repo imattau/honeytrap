@@ -3,10 +3,12 @@ import { WebTorrentAssist } from '../src/p2p/webtorrent';
 import type { AssistSource } from '../src/p2p/types';
 
 const addMock = vi.fn();
+const ensureMock = vi.fn();
 const getClient = vi.fn();
 
 afterEach(() => {
   addMock.mockReset();
+  ensureMock.mockReset();
 });
 
 beforeEach(() => {
@@ -64,5 +66,32 @@ describe('WebTorrentAssist webseed', () => {
     const source = makeSource({ type: 'event' });
     await (assist as any).addTorrent(source.magnet!, 1, source);
     expect(addMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('reuses webSeed when reseeding via ensure', () => {
+    const assist = new WebTorrentAssist(makeSettings(), undefined, {
+      getClient,
+      ensure: ensureMock
+    } as any);
+
+    ensureMock.mockImplementation((_magnet, _onAdd, opts) => {
+      expect(opts?.webSeeds).toEqual(['https://example.com/media.jpg']);
+      return { files: [], on: () => null };
+    });
+
+    const source = makeSource();
+    assist.ensureWebSeed(source, true);
+    expect(ensureMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('skips webSeed reseed when P2P is disallowed', () => {
+    const assist = new WebTorrentAssist(makeSettings(), undefined, {
+      getClient,
+      ensure: ensureMock
+    } as any);
+
+    const source = makeSource();
+    assist.ensureWebSeed(source, false);
+    expect(ensureMock).not.toHaveBeenCalled();
   });
 });

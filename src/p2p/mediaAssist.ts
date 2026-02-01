@@ -35,6 +35,10 @@ export class MediaAssist implements MediaAssistApi {
     return task;
   }
 
+  ensureWebSeed(source: AssistSource, allowP2P: boolean) {
+    this.p2p.ensureWebSeed(source, allowP2P);
+  }
+
   private async fetch(source: AssistSource, allowP2P: boolean, timeoutMs: number): Promise<MediaAssistResult> {
     const isP2POnly = source.url.startsWith('p2p://');
     const canAssist = this.settings.enabled && allowP2P && (isP2POnly || this.settings.preferMedia);
@@ -42,9 +46,13 @@ export class MediaAssist implements MediaAssistApi {
       throw new Error('P2P assist disabled');
     }
     if (!canAssist && !source.sha256 && !isP2POnly) {
+      this.p2p.ensureWebSeed(source, allowP2P);
       return { url: source.url, source: 'http' };
     }
     const result = await this.p2p.fetchWithAssist(source, timeoutMs, canAssist);
+    if (result.source === 'http') {
+      this.p2p.ensureWebSeed(source, allowP2P);
+    }
     const blob = new Blob([result.data]);
     const url = URL.createObjectURL(blob);
     return { url, source: result.source };

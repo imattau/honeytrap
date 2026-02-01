@@ -20,8 +20,10 @@ declare module 'webtorrent' {
 
   export default class WebTorrent {
     constructor(opts?: any);
+    add(magnet: string, opts: any, cb: (torrent: Torrent) => void): Torrent;
     add(magnet: string, cb: (torrent: Torrent) => void): Torrent;
     seed(file: File | Blob | ArrayBuffer | Uint8Array, cb: (torrent: Torrent) => void): Torrent;
+    get(magnet: string): Torrent | undefined;
     destroy(): void;
   }
 }
