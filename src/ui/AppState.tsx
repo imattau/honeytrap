@@ -19,6 +19,7 @@ import type { AssistSource } from '../p2p/types';
 import { SocialGraph } from '../nostr/social';
 import { NostrCache } from '../nostr/cache';
 import { AuthorService } from '../nostr/author';
+import { MediaRelayListService } from '../nostr/lists';
 
 interface AppStateValue {
   settings: AppSettings;
@@ -26,6 +27,7 @@ interface AppStateValue {
   profiles: Record<string, ProfileMetadata>;
   followers: string[];
   relayList: string[];
+  mediaRelayList: string[];
   relayStatus: Record<string, boolean>;
   refreshRelayStatus: () => void;
   feedLoading: boolean;
@@ -68,6 +70,7 @@ interface AppStateValue {
   toggleBlock: (pubkey: string) => void;
   toggleNsfwAuthor: (pubkey: string) => void;
   setFeedMode: (mode: AppSettings['feedMode']) => void;
+  saveMediaRelays: (urls: string[]) => Promise<void>;
   authorService: AuthorService;
   findEventById: (id: string) => NostrEvent | undefined;
 }
@@ -80,6 +83,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   const [profiles, setProfiles] = useState<Record<string, ProfileMetadata>>({});
   const [followers, setFollowers] = useState<string[]>([]);
   const [relayList, setRelayList] = useState<string[]>([]);
+  const [mediaRelayList, setMediaRelayList] = useState<string[]>([]);
   const [relayStatus, setRelayStatus] = useState<Record<string, boolean>>({});
   const [feedLoading, setFeedLoading] = useState(false);
   const [pendingCount, setPendingCount] = useState(0);
@@ -96,7 +100,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   const mediaAssist = useMemo(() => new MediaAssist(defaultSettings.p2p), []);
   const nostrCache = useMemo(() => new NostrCache(), []);
   const blockedRef = useRef<string[]>([]);
-  const socialFetchRef = useRef({ followersAt: 0, followingAt: 0, relaysAt: 0 });
+  const socialFetchRef = useRef({ followersAt: 0, followingAt: 0, relaysAt: 0, mediaRelaysAt: 0 });
   const feedService = useMemo(() => new FeedService(nostr), [nostr]);
   const nip46SessionRef = useRef<Nip46Session | null>(null);
   const orchestrator = useMemo(
@@ -114,6 +118,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   const signer = useMemo(() => new EventSigner(() => keys, () => nip46SessionRef.current), [keys]);
   const publishService = useMemo(() => new PublishService(nostr, signer), [nostr, signer]);
   const zapService = useMemo(() => new ZapService(signer), [signer]);
+  const mediaRelayService = useMemo(() => new MediaRelayListService(nostr, signer), [nostr, signer]);
 
   const updateSettings = (next: AppSettings) => {
     setSettingsState(next);
@@ -224,6 +229,26 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
       active = false;
     };
   }, [keys?.npub, settings.relays, nostr, updateSettings]);
+
+  useEffect(() => {
+    if (!keys?.npub) return;
+    const now = Date.now();
+    if (now - socialFetchRef.current.mediaRelaysAt < 30_000) return;
+    socialFetchRef.current.mediaRelaysAt = now;
+    let active = true;
+    nostr.fetchMediaRelayList(keys.npub)
+      .then((list) => {
+        if (!active) return;
+        setMediaRelayList(list);
+        if (list.length === 0) return;
+        if (sameSet(list, settings.mediaRelays)) return;
+        updateSettings({ ...settings, mediaRelays: list });
+      })
+      .catch(() => null);
+    return () => {
+      active = false;
+    };
+  }, [keys?.npub, settings.mediaRelays, nostr, updateSettings]);
 
   useEffect(() => {
     if (!keys?.npub) return;
@@ -361,6 +386,17 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     updateSettings({ ...settings, feedMode: mode });
   }, [settings, updateSettings]);
 
+  const saveMediaRelays = useCallback(async (urls: string[]) => {
+    updateSettings({ ...settings, mediaRelays: urls });
+    setMediaRelayList(urls);
+    if (!keys?.npub) return;
+    try {
+      await mediaRelayService.publish(urls);
+    } catch {
+      // ignore publish errors; local settings still updated
+    }
+  }, [mediaRelayService, keys?.npub, settings, updateSettings]);
+
   const loadThread = useCallback(async (eventId: string) => {
     return threadService.loadThread(eventId);
   }, [threadService]);
@@ -414,6 +450,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
         profiles,
         followers,
         relayList,
+        mediaRelayList,
         relayStatus,
         refreshRelayStatus,
         feedLoading,
@@ -446,6 +483,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
         toggleBlock,
         toggleNsfwAuthor,
         setFeedMode,
+        saveMediaRelays,
         authorService,
         findEventById
       }}

@@ -17,6 +17,7 @@ export class NostrCache implements NostrCacheApi {
   private followers = new CacheStore<string[]>({ maxEntries: 200, evictionPolicy: 'fifo' });
   private following = new CacheStore<string[]>({ maxEntries: 200, evictionPolicy: 'fifo' });
   private relayList = new CacheStore<string[]>({ maxEntries: 200, evictionPolicy: 'fifo' });
+  private mediaRelayList = new CacheStore<string[]>({ maxEntries: 200, evictionPolicy: 'fifo' });
 
   async getProfile(pubkey: string) {
     return this.profiles.get(`profile:${pubkey}`);
@@ -66,6 +67,14 @@ export class NostrCache implements NostrCacheApi {
     await this.relayList.set(`relaylist:${pubkey}`, list, TTL_RELAYLIST);
   }
 
+  async getMediaRelayList(pubkey: string) {
+    return this.mediaRelayList.get(`mediarelaylist:${pubkey}`);
+  }
+
+  async setMediaRelayList(pubkey: string, list: string[]) {
+    await this.mediaRelayList.set(`mediarelaylist:${pubkey}`, list, TTL_RELAYLIST);
+  }
+
   async purgeExpired() {
     await Promise.all([
       this.profiles.purgeExpired(),
@@ -73,7 +82,8 @@ export class NostrCache implements NostrCacheApi {
       this.replies.purgeExpired(),
       this.followers.purgeExpired(),
       this.following.purgeExpired(),
-      this.relayList.purgeExpired()
+      this.relayList.purgeExpired(),
+      this.mediaRelayList.purgeExpired()
     ]);
   }
 }

@@ -21,8 +21,10 @@ export function Drawer() {
     selfProfile,
     followers,
     relayList,
+    mediaRelayList,
     relayStatus,
     refreshRelayStatus,
+    saveMediaRelays,
     saveKeyRecord,
     clearKeys,
     connectNip07,
@@ -37,14 +39,14 @@ export function Drawer() {
   const [connectStatus, setConnectStatus] = useState<string | null>(null);
   const [savedSection, setSavedSection] = useState<'relays' | 'media' | 'torrent' | 'wallet' | null>(null);
   const [isWide, setIsWide] = useState(false);
-  const [menuState, setMenuState] = useState(() => buildMenuState(settings, relayList));
+  const [menuState, setMenuState] = useState(() => buildMenuState(settings, relayList, mediaRelayList));
   const [relaysOpen, setRelaysOpen] = useState(false);
   const fallbackAvatar = '/assets/honeytrap_logo_256.png';
   const headerImage = '/assets/honeytrap_header_960.png';
 
   useEffect(() => {
-    setMenuState(buildMenuState(settings, relayList));
-  }, [settings, relayList]);
+    setMenuState(buildMenuState(settings, relayList, mediaRelayList));
+  }, [settings, relayList, mediaRelayList]);
 
   useEffect(() => {
     if (!relaysOpen) return;
@@ -109,7 +111,8 @@ export function Drawer() {
   };
 
   const handleSaveMediaRelays = () => {
-    setSettings(menuState.applyMediaRelays(settings));
+    const next = menuState.applyMediaRelays(settings);
+    saveMediaRelays(next.mediaRelays).catch(() => null);
     setSavedSection('media');
   };
 
@@ -224,6 +227,9 @@ export function Drawer() {
               onSave={handleSaveMediaRelays}
               saved={savedSection === 'media'}
             />
+            {mediaRelayList.length > 0 && (
+              <div className="menu-sub">NIP-51 media relays loaded ({mediaRelayList.length})</div>
+            )}
             <NostrRelaysSection
               value={menuState.relaysInput}
               onChange={(value) => setMenuState(menuState.withRelaysInput(value))}
@@ -259,8 +265,10 @@ export function Drawer() {
   );
 }
 
-function buildMenuState(settings: AppSettings, relayList: string[]) {
+function buildMenuState(settings: AppSettings, relayList: string[], mediaRelayList: string[]) {
   const state = MenuState.fromSettings(settings);
-  if (relayList.length === 0) return state;
-  return state.withRelaysInput(relayList.join('\n'));
+  let next = state;
+  if (relayList.length > 0) next = next.withRelaysInput(relayList.join('\n'));
+  if (mediaRelayList.length > 0) next = next.withMediaRelaysInput(mediaRelayList.join('\n'));
+  return next;
 }

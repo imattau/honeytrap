@@ -27,6 +27,7 @@ export interface NostrClientApi {
   fetchFollowers(pubkey: string, limit?: number): Promise<string[]>;
   fetchFollowing(pubkey: string): Promise<string[]>;
   fetchRelayList(pubkey: string): Promise<string[]>;
+  fetchMediaRelayList(pubkey: string): Promise<string[]>;
   getRelayStatus(): Map<string, boolean>;
 }
 
@@ -43,6 +44,8 @@ export interface NostrCacheApi {
   setFollowing(pubkey: string, list: string[]): Promise<void>;
   getRelayList(pubkey: string): Promise<string[] | undefined>;
   setRelayList(pubkey: string, list: string[]): Promise<void>;
+  getMediaRelayList(pubkey: string): Promise<string[] | undefined>;
+  setMediaRelayList(pubkey: string, list: string[]): Promise<void>;
   purgeExpired(): Promise<void>;
 }
 
@@ -57,7 +60,8 @@ export interface FeedOrchestratorApi {
     ctx: { follows: string[]; followers: string[]; feedMode: AppSettings['feedMode']; listId?: string; lists?: ListDescriptor[] },
     getEvents: () => NostrEvent[],
     onUpdate: (events: NostrEvent[]) => void,
-    onProfiles: (profiles: Record<string, ProfileMetadata>) => void
+    onProfiles: (profiles: Record<string, ProfileMetadata>) => void,
+    onPending?: (count: number) => void
   ): void;
   stop(): void;
   loadOlder(

@@ -128,6 +128,26 @@ export class NostrClient implements NostrClientApi {
     return list;
   }
 
+  async fetchMediaRelayList(pubkey: string): Promise<string[]> {
+    const cached = await this.cache?.getMediaRelayList(pubkey);
+    if (cached) return cached;
+    const events = await this.pool.querySync(this.relays, {
+      kinds: [30000],
+      authors: [pubkey],
+      '#d': ['media-relays'],
+      limit: 1
+    });
+    const latest = (events as NostrEvent[])
+      .sort((a, b) => b.created_at - a.created_at)[0];
+    if (!latest) return [];
+    const urls = latest.tags
+      .filter((tag) => tag[0] === 'u' && tag[1])
+      .map((tag) => tag[1]);
+    const list = Array.from(new Set(urls));
+    await this.cache?.setMediaRelayList(pubkey, list);
+    return list;
+  }
+
   async fetchEventById(id: string): Promise<NostrEvent | undefined> {
     const cached = await this.cache?.getEvent(id);
     if (cached) return cached;
