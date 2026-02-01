@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { X, Paperclip, UploadCloud, Trash2, Send } from 'lucide-react';
+import { X, Paperclip, UploadCloud, Trash2, Send, Link2, Plus } from 'lucide-react';
 import type { NostrEvent } from '../nostr/types';
 
 export interface ComposerInput {
@@ -13,13 +13,17 @@ interface ComposerProps {
   onClose: () => void;
   onSubmit: (input: ComposerInput) => Promise<void>;
   mediaRelays?: string[];
-  onUpload?: (file: File, relay: string) => Promise<{ url: string; sha256?: string }>;
+  onUpload?: (file: File, relay: string, onProgress?: (percent: number) => void) => Promise<{ url: string; sha256?: string }>;
 }
 
 export function Composer({ open, replyTo, onClose, onSubmit, mediaRelays = [], onUpload }: ComposerProps) {
   const [content, setContent] = useState('');
   const [media, setMedia] = useState<ComposerInput['media']>([]);
   const [selectedRelay, setSelectedRelay] = useState(mediaRelays[0] ?? '');
+  const [manualUrl, setManualUrl] = useState('');
+  const [showManual, setShowManual] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadState, setUploadState] = useState<{ index: number; total: number } | null>(null);
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -32,8 +36,8 @@ export function Composer({ open, replyTo, onClose, onSubmit, mediaRelays = [], o
     }
   }, [mediaRelays, selectedRelay]);
 
-  const handleUpload = async (file?: File) => {
-    if (!file) return;
+  const handleUpload = async (files?: FileList | null) => {
+    if (!files || files.length === 0) return;
     if (!selectedRelay) {
       setError('Select a media relay');
       return;
@@ -45,13 +49,27 @@ export function Composer({ open, replyTo, onClose, onSubmit, mediaRelays = [], o
     setUploading(true);
     setError(null);
     try {
-      const result = await onUpload(file, selectedRelay);
-      setMedia((prev) => [...prev, { url: result.url, sha256: result.sha256 }]);
+      const list = Array.from(files);
+      for (let i = 0; i < list.length; i += 1) {
+        const file = list[i];
+        setUploadState({ index: i + 1, total: list.length });
+        setUploadProgress(0);
+        const result = await onUpload(file, selectedRelay, (percent) => setUploadProgress(percent));
+        setMedia((prev) => [...prev, { url: result.url, sha256: result.sha256 }]);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Upload failed');
     } finally {
+      setUploadState(null);
+      setUploadProgress(0);
       setUploading(false);
     }
+  };
+
+  const handleAddManual = () => {
+    if (!manualUrl.trim()) return;
+    setMedia((prev) => [...prev, { url: manualUrl.trim() }]);
+    setManualUrl('');
   };
 
   const handleSubmit = async () => {
@@ -109,13 +127,45 @@ export function Composer({ open, replyTo, onClose, onSubmit, mediaRelays = [], o
                 <UploadCloud size={16} />
                 <input
                   type="file"
+                  multiple
                   className="composer-file"
-                  onChange={(event) => handleUpload(event.target.files?.[0])}
+                  onChange={(event) => handleUpload(event.target.files)}
                 />
               </label>
+              <button
+                className={`composer-icon ${showManual ? 'active' : ''}`}
+                onClick={() => setShowManual((prev) => !prev)}
+                aria-label="Add media URL"
+              >
+                <Link2 size={16} />
+              </button>
             </div>
-            {uploading && <div className="composer-sub">Uploading…</div>}
+            {uploading && uploadState && (
+              <div className="composer-sub">
+                Uploading {uploadState.index}/{uploadState.total} — {uploadProgress}%
+              </div>
+            )}
+            {uploading && (
+              <div className="composer-progress">
+                <div className="composer-progress-bar" style={{ width: `${uploadProgress}%` }} />
+              </div>
+            )}
           </div>
+          {showManual && (
+            <div className="composer-row">
+              <label><Link2 size={14} /> Media URL</label>
+              <div className="composer-row-inline">
+                <input
+                  value={manualUrl}
+                  onChange={(event) => setManualUrl(event.target.value)}
+                  placeholder="https://…"
+                />
+                <button className="composer-icon" onClick={handleAddManual} aria-label="Add media URL">
+                  <Plus size={16} />
+                </button>
+              </div>
+            </div>
+          )}
           {media.length > 0 && (
             <div className="composer-media-list">
               {media.map((item) => (

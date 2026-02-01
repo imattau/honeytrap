@@ -9,7 +9,7 @@ export interface UploadResult {
 export class MediaUploadService {
   constructor(private signer: EventSigner) {}
 
-  async upload(file: File, relayBase: string): Promise<UploadResult> {
+  async upload(file: File, relayBase: string, onProgress?: (percent: number) => void): Promise<UploadResult> {
     const apiUrl = await this.resolveApiUrl(relayBase);
     const payloadHash = await sha256Hex(await file.arrayBuffer());
     const payloadBase64 = toBase64Hex(payloadHash);
@@ -28,19 +28,27 @@ export class MediaUploadService {
     form.append('size', String(file.size));
     if (file.type) form.append('content_type', file.type);
 
-    const response = await fetch(apiUrl, {
-      method: 'POST',
-      headers: {
-        Authorization: `Nostr ${btoa(JSON.stringify(authEvent))}`
-      },
-      body: form
+    const responseText = await new Promise<string>((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', apiUrl, true);
+      xhr.setRequestHeader('Authorization', `Nostr ${btoa(JSON.stringify(authEvent))}`);
+      xhr.upload.onprogress = (event) => {
+        if (!event.lengthComputable) return;
+        const percent = Math.round((event.loaded / event.total) * 100);
+        onProgress?.(percent);
+      };
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          resolve(xhr.responseText);
+        } else {
+          reject(new Error(`Upload failed (${xhr.status})`));
+        }
+      };
+      xhr.onerror = () => reject(new Error('Upload failed'));
+      xhr.send(form);
     });
 
-    if (!response.ok) {
-      throw new Error(`Upload failed (${response.status})`);
-    }
-
-    const data = (await response.json()) as {
+    const data = JSON.parse(responseText) as {
       status?: string;
       nip94_event?: { tags?: string[][] };
     };

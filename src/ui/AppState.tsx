@@ -74,7 +74,7 @@ interface AppStateValue {
   toggleNsfwAuthor: (pubkey: string) => void;
   setFeedMode: (mode: AppSettings['feedMode']) => void;
   saveMediaRelays: (urls: string[]) => Promise<void>;
-  uploadMedia: (file: File, relay: string) => Promise<{ url: string; sha256?: string }>;
+  uploadMedia: (file: File, relay: string, onProgress?: (percent: number) => void) => Promise<{ url: string; sha256?: string }>;
   authorService: AuthorService;
   findEventById: (id: string) => NostrEvent | undefined;
 }
@@ -448,9 +448,9 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     }
   }, [mediaRelayService, keys?.npub, settings, updateSettings]);
 
-  const uploadMedia = useCallback(async (file: File, relay: string) => {
+  const uploadMedia = useCallback(async (file: File, relay: string, onProgress?: (percent: number) => void) => {
     if (!keys?.npub) throw new Error('Sign in to upload media');
-    return mediaUploadService.upload(file, relay);
+    return mediaUploadService.upload(file, relay, onProgress);
   }, [mediaUploadService, keys?.npub]);
 
   const loadThread = useCallback(async (eventId: string) => {

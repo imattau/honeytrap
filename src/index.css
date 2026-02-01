@@ -1093,6 +1093,28 @@ body {
   place-items: center;
 }
 
+.composer-icon.active {
+  border-color: rgba(109, 214, 255, 0.7);
+  color: #6dd6ff;
+  box-shadow: 0 0 12px rgba(109, 214, 255, 0.25);
+}
+
+.composer-progress {
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.7);
+  border: 1px solid #1b222c;
+  overflow: hidden;
+  margin-top: 6px;
+}
+
+.composer-progress-bar {
+  height: 100%;
+  background: linear-gradient(90deg, rgba(109, 214, 255, 0.4), rgba(109, 214, 255, 0.95));
+  width: 0%;
+  transition: width 120ms ease;
+}
+
 .composer-button {
   display: inline-flex;
   align-items: center;
