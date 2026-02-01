@@ -1,0 +1,68 @@
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { WebTorrentAssist } from '../src/p2p/webtorrent';
+import type { AssistSource } from '../src/p2p/types';
+
+const addMock = vi.fn();
+const getClient = vi.fn();
+
+afterEach(() => {
+  addMock.mockReset();
+});
+
+beforeEach(() => {
+  getClient.mockReturnValue({});
+});
+
+function makeSettings() {
+  return {
+    enabled: true,
+    maxConcurrent: 5,
+    maxFileSizeMb: 50,
+    seedWhileOpen: true,
+    trackers: ['wss://tracker.example']
+  };
+}
+
+function makeSource(patch: Partial<AssistSource> = {}): AssistSource {
+  return {
+    url: 'https://example.com/media.jpg',
+    magnet: 'magnet:?xt=urn:btih:abc',
+    sha256: undefined,
+    type: 'media',
+    ...patch
+  };
+}
+
+describe('WebTorrentAssist webseed', () => {
+  it('passes webSeed option for media when HTTP url exists', async () => {
+    const assist = new WebTorrentAssist(makeSettings(), undefined, {
+      getClient,
+      add: addMock
+    } as any);
+
+    addMock.mockImplementation((_magnet, _onAdd, opts) => {
+      expect(opts?.webSeeds).toEqual(['https://example.com/media.jpg']);
+      return { files: [], on: () => null };
+    });
+
+    const source = makeSource();
+    await (assist as any).addTorrent(source.magnet!, 1, source);
+    expect(addMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not pass webSeed for event packages', async () => {
+    const assist = new WebTorrentAssist(makeSettings(), undefined, {
+      getClient,
+      add: addMock
+    } as any);
+
+    addMock.mockImplementation((_magnet, _onAdd, opts) => {
+      expect(opts?.webSeeds).toBeUndefined();
+      return { files: [], on: () => null };
+    });
+
+    const source = makeSource({ type: 'event' });
+    await (assist as any).addTorrent(source.magnet!, 1, source);
+    expect(addMock).toHaveBeenCalledTimes(1);
+  });
+});

@@ -44,19 +44,19 @@ export class WebTorrentHub {
     return this.client.seed(file, onSeed);
   }
 
-  add(magnet: string, onAdd: (torrent: Torrent) => void): Torrent {
+  add(magnet: string, onAdd: (torrent: Torrent) => void, opts?: Record<string, unknown>): Torrent {
     if (!this.client) throw new Error('WebTorrent disabled');
-    return this.client.add(magnet, onAdd);
+    return this.client.add(magnet, opts ?? {}, onAdd);
   }
 
-  ensure(magnet: string, onAdd: (torrent: Torrent) => void): Torrent {
+  ensure(magnet: string, onAdd: (torrent: Torrent) => void, opts?: Record<string, unknown>): Torrent {
     if (!this.client) throw new Error('WebTorrent disabled');
     const existing = this.client.get(magnet);
     if (existing) {
       onAdd(existing);
       return existing;
     }
-    return this.client.add(magnet, onAdd);
+    return this.client.add(magnet, opts ?? {}, onAdd);
   }
 
   private createClient(settings: P2PSettings, existing?: WebTorrent) {

@@ -11,11 +11,11 @@ class FakeWebTorrent {
     FakeWebTorrent.instances.push(this);
   }
 
-  add(magnet: string, onAdd: (torrent: FakeTorrent) => void) {
+  add(magnet: string, opts: any, onAdd?: (torrent: FakeTorrent) => void) {
     FakeWebTorrent.addCalls += 1;
     const torrent = { magnetURI: magnet };
     this.items.set(magnet, torrent);
-    onAdd(torrent);
+    if (typeof onAdd === 'function') onAdd(torrent);
     return torrent;
   }
 

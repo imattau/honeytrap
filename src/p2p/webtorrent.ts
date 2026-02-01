@@ -79,6 +79,9 @@ export class WebTorrentAssist {
         resolve(undefined);
       }, timeoutMs);
 
+      const webSeeds = source.type === 'media' && source.url.startsWith('http')
+        ? [source.url]
+        : undefined;
       this.hub!.add(magnet, (torrent: Torrent) => {
         if (timedOut) {
           torrent.destroy();
@@ -111,7 +114,7 @@ export class WebTorrentAssist {
         };
         if (torrent.ready) onReady();
         else torrent.once('ready', onReady);
-      });
+      }, webSeeds ? { webSeeds } : undefined);
     });
   }
 }
