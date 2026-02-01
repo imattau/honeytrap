@@ -10,10 +10,24 @@ import type { NostrCache } from './cache';
 export class NostrClient implements NostrClientApi {
   private pool = new SimplePool();
   private relays: string[] = [];
+  private relaySet = new Set<string>();
   private cache?: NostrCache;
 
   setRelays(relays: string[]) {
-    this.relays = relays;
+    const next = Array.from(new Set(relays.map((url) => url.trim()).filter(Boolean)));
+    const nextSet = new Set(next);
+    const removed = Array.from(this.relaySet).filter((url) => !nextSet.has(url));
+    const added = next.filter((url) => !this.relaySet.has(url));
+    this.relays = next;
+    this.relaySet = nextSet;
+    if (removed.length > 0) {
+      this.pool.close(removed);
+    }
+    if (added.length > 0) {
+      added.forEach((url) => {
+        this.pool.ensureRelay(url, { connectionTimeout: 4000 }).catch(() => null);
+      });
+    }
   }
 
   setCache(cache?: NostrCache) {

@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Virtuoso, type VirtuosoHandle } from 'react-virtuoso';
 import { BrowserRouter, Route, Routes, useNavigate, useLocation } from 'react-router-dom';
 import { AppStateProvider, useAppState } from './ui/AppState';
@@ -6,11 +6,26 @@ import { Drawer } from './ui/Drawer';
 import { PostCard } from './ui/PostCard';
 import { ThreadStack } from './ui/ThreadStack';
 import { AuthorView } from './ui/AuthorView';
+import { FabButton } from './ui/FabButton';
+import { Composer } from './ui/Composer';
 
 const FEED_SCROLL_KEY = 'honeytrap:feed-scroll-top';
 
 function Feed() {
-  const { events, profiles, selectEvent, loadOlder, flushPending, feedLoading, pendingCount } = useAppState();
+  const {
+    events,
+    profiles,
+    selectEvent,
+    loadOlder,
+    flushPending,
+    feedLoading,
+    pendingCount,
+    publishPost,
+    mediaRelayList,
+    settings,
+    uploadMedia
+  } = useAppState();
+  const [composerOpen, setComposerOpen] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
   const virtuosoRef = useRef<VirtuosoHandle | null>(null);
@@ -88,6 +103,14 @@ function Feed() {
             />
           </div>
         )}
+      />
+      <FabButton onClick={() => setComposerOpen(true)} />
+      <Composer
+        open={composerOpen}
+        onClose={() => setComposerOpen(false)}
+        onSubmit={(input) => publishPost(input)}
+        mediaRelays={mediaRelayList.length > 0 ? mediaRelayList : settings.mediaRelays}
+        onUpload={uploadMedia}
       />
     </div>
   );

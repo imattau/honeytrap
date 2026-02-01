@@ -20,6 +20,8 @@ import { SocialGraph } from '../nostr/social';
 import { NostrCache } from '../nostr/cache';
 import { AuthorService } from '../nostr/author';
 import { MediaRelayListService } from '../nostr/lists';
+import { MagnetBuilder } from '../p2p/magnetBuilder';
+import { MediaUploadService } from '../nostr/mediaUpload';
 
 interface AppStateValue {
   settings: AppSettings;
@@ -48,6 +50,7 @@ interface AppStateValue {
   disconnectNip46: () => void;
   loadOlder: () => Promise<void>;
   loadThread: (eventId: string) => Promise<ThreadNode[]>;
+  publishPost: (input: PublishInput) => Promise<NostrEvent>;
   publishReply: (input: PublishInput, replyTo: NostrEvent) => Promise<NostrEvent>;
   sendZap: (input: {
     event: NostrEvent;
@@ -71,6 +74,7 @@ interface AppStateValue {
   toggleNsfwAuthor: (pubkey: string) => void;
   setFeedMode: (mode: AppSettings['feedMode']) => void;
   saveMediaRelays: (urls: string[]) => Promise<void>;
+  uploadMedia: (file: File, relay: string) => Promise<{ url: string; sha256?: string }>;
   authorService: AuthorService;
   findEventById: (id: string) => NostrEvent | undefined;
 }
@@ -98,6 +102,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   const settingsStore = useMemo(() => new SettingsStore(defaultSettings), []);
   const transportStore = useMemo(() => new TransportStore(), []);
   const mediaAssist = useMemo(() => new MediaAssist(defaultSettings.p2p), []);
+  const magnetBuilder = useMemo(() => new MagnetBuilder(defaultSettings.p2p), []);
   const nostrCache = useMemo(() => new NostrCache(), []);
   const blockedRef = useRef<string[]>([]);
   const socialFetchRef = useRef({ followersAt: 0, followingAt: 0, relaysAt: 0, mediaRelaysAt: 0 });
@@ -119,6 +124,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   const publishService = useMemo(() => new PublishService(nostr, signer), [nostr, signer]);
   const zapService = useMemo(() => new ZapService(signer), [signer]);
   const mediaRelayService = useMemo(() => new MediaRelayListService(nostr, signer), [nostr, signer]);
+  const mediaUploadService = useMemo(() => new MediaUploadService(signer), [signer]);
 
   const updateSettings = (next: AppSettings) => {
     setSettingsState(next);
@@ -153,6 +159,10 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     mediaAssist.updateSettings(settings.p2p);
   }, [mediaAssist, settings.p2p]);
+
+  useEffect(() => {
+    magnetBuilder.updateSettings(settings.p2p);
+  }, [magnetBuilder, settings.p2p]);
 
   useEffect(() => {
     const unsubscribe = transportStore.subscribe(setTransport);
@@ -386,6 +396,47 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     updateSettings({ ...settings, feedMode: mode });
   }, [settings, updateSettings]);
 
+  const publishWithAssist = useCallback(async (input: PublishInput) => {
+    const media = input.media ?? [];
+    const withMediaAssist = await Promise.all(
+      media.map(async (item) => {
+        if (!settings.p2p.enabled) return item;
+        try {
+          const assist = await magnetBuilder.buildMediaPackage(item.url);
+          return { ...item, magnet: assist.magnet, sha256: assist.sha256 };
+        } catch {
+          return item;
+        }
+      })
+    );
+
+    if (!settings.p2p.enabled) {
+      return publishService.publishNote({
+        content: input.content,
+        media: withMediaAssist,
+        replyTo: input.replyTo
+      });
+    }
+
+    // Event package is derived from a signed note without assist tags to avoid recursion.
+    const baseSigned = await publishService.signNote({
+      content: input.content,
+      media: withMediaAssist,
+      replyTo: input.replyTo
+    });
+    const eventAssist = await magnetBuilder.buildEventPackage(baseSigned);
+    const eventTags: string[][] = [];
+    if (eventAssist.magnet) eventTags.push(['bt', eventAssist.magnet, 'event']);
+    if (eventAssist.sha256) eventTags.push(['x', `sha256:${eventAssist.sha256}`, 'event']);
+
+    const finalSigned = await publishService.signNote(
+      { content: input.content, media: withMediaAssist, replyTo: input.replyTo },
+      eventTags
+    );
+    await publishService.publishSigned(finalSigned);
+    return finalSigned;
+  }, [magnetBuilder, publishService, settings.p2p.enabled]);
+
   const saveMediaRelays = useCallback(async (urls: string[]) => {
     updateSettings({ ...settings, mediaRelays: urls });
     setMediaRelayList(urls);
@@ -397,17 +448,29 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     }
   }, [mediaRelayService, keys?.npub, settings, updateSettings]);
 
+  const uploadMedia = useCallback(async (file: File, relay: string) => {
+    if (!keys?.npub) throw new Error('Sign in to upload media');
+    return mediaUploadService.upload(file, relay);
+  }, [mediaUploadService, keys?.npub]);
+
   const loadThread = useCallback(async (eventId: string) => {
     return threadService.loadThread(eventId);
   }, [threadService]);
 
   const publishReply = useCallback(async (input: PublishInput, replyTo: NostrEvent) => {
-    return publishService.publishNote({
+    return publishWithAssist({
       content: input.content,
       media: input.media,
       replyTo
     });
-  }, [publishService]);
+  }, [publishWithAssist]);
+
+  const publishPost = useCallback(async (input: PublishInput) => {
+    return publishWithAssist({
+      content: input.content,
+      media: input.media
+    });
+  }, [publishWithAssist]);
 
   const sendZap = useCallback(async ({ event, profile, amountSats, comment }: {
     event: NostrEvent;
@@ -471,6 +534,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
         disconnectNip46: disconnectRemoteSigner,
         loadOlder,
         loadThread,
+        publishPost,
         publishReply,
         sendZap,
         transport,
@@ -484,6 +548,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
         toggleNsfwAuthor,
         setFeedMode,
         saveMediaRelays,
+        uploadMedia,
         authorService,
         findEventById
       }}

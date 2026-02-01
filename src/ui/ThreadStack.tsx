@@ -13,7 +13,17 @@ export function ThreadStack() {
   const { id } = useParams<{ id: string }>();
   const location = useLocation();
   const navigate = useNavigate();
-  const { profiles, selectEvent, loadThread, publishReply, sendZap, settings, findEventById } = useAppState();
+  const {
+    profiles,
+    selectEvent,
+    loadThread,
+    publishReply,
+    sendZap,
+    settings,
+    findEventById,
+    mediaRelayList,
+    uploadMedia
+  } = useAppState();
   const [nodes, setNodes] = useState<ThreadNode[]>([]);
   const [loading, setLoading] = useState(true);
   const [touchStart, setTouchStart] = useState<number | null>(null);
@@ -114,6 +124,8 @@ export function ThreadStack() {
         replyTo={replyTarget}
         onClose={() => setComposerOpen(false)}
         onSubmit={(input) => replyTarget ? publishReply(input, replyTarget) : Promise.resolve()}
+        mediaRelays={mediaRelayList.length > 0 ? mediaRelayList : settings.mediaRelays}
+        onUpload={uploadMedia}
       />
       <ZapComposer
         open={zapOpen}

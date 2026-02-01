@@ -13,20 +13,27 @@ export class PublishService implements PublishServiceApi {
   constructor(private client: NostrClient, private signer: EventSigner) {}
 
   async publishNote(input: PublishInput): Promise<NostrEvent> {
+    const signed = await this.signNote(input);
+    await this.publishSigned(signed);
+    return signed;
+  }
+
+  async signNote(input: PublishInput, extraTags: NostrTag[] = []): Promise<NostrEvent> {
     const base = {
       kind: 1,
       created_at: Math.floor(Date.now() / 1000),
       content: input.content,
-      tags: buildTags(input)
+      tags: [...buildTags(input), ...extraTags]
     };
+    return this.signer.signEvent(base);
+  }
 
-    const signed = await this.signer.signEvent(base);
-    await this.client.publishEvent(signed);
-    return signed;
+  async publishSigned(event: NostrEvent): Promise<void> {
+    await this.client.publishEvent(event);
   }
 }
 
-function buildTags(input: PublishInput): NostrTag[] {
+export function buildTags(input: PublishInput): NostrTag[] {
   const tags: NostrTag[] = [];
   if (input.replyTo) {
     const root = input.replyTo.tags.find((tag) => tag[0] === 'e' && tag[3] === 'root');

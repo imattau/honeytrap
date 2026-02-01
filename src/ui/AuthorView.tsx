@@ -5,16 +5,31 @@ import { ArrowLeft, UserCheck, UserPlus, Ban } from 'lucide-react';
 import type { NostrEvent, ProfileMetadata } from '../nostr/types';
 import { useAppState } from './AppState';
 import { PostCard } from './PostCard';
+import { FabButton } from './FabButton';
+import { Composer } from './Composer';
 import { decodeKey } from '../nostr/auth';
 import { IconButton } from './IconButton';
 
 export function AuthorView() {
   const { pubkey } = useParams<{ pubkey: string }>();
   const navigate = useNavigate();
-  const { authorService, profiles, selectEvent, isFollowed, isBlocked, toggleFollow, toggleBlock } = useAppState();
+  const {
+    authorService,
+    profiles,
+    selectEvent,
+    isFollowed,
+    isBlocked,
+    toggleFollow,
+    toggleBlock,
+    publishPost,
+    mediaRelayList,
+    settings,
+    uploadMedia
+  } = useAppState();
   const [events, setEvents] = useState<NostrEvent[]>([]);
   const [profile, setProfile] = useState<ProfileMetadata | undefined>(undefined);
   const [loading, setLoading] = useState(true);
+  const [composerOpen, setComposerOpen] = useState(false);
   const eventsRef = useRef<NostrEvent[]>([]);
   const resolvedPubkey = useMemo(() => {
     if (!pubkey) return '';
@@ -122,6 +137,14 @@ export function AuthorView() {
             />
           </div>
         )}
+      />
+      <FabButton onClick={() => setComposerOpen(true)} />
+      <Composer
+        open={composerOpen}
+        onClose={() => setComposerOpen(false)}
+        onSubmit={(input) => publishPost(input)}
+        mediaRelays={mediaRelayList.length > 0 ? mediaRelayList : settings.mediaRelays}
+        onUpload={uploadMedia}
       />
     </div>
   );

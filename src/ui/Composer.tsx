@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { X, Paperclip, Magnet, Hash } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { X, Paperclip, UploadCloud, Trash2, Send } from 'lucide-react';
 import type { NostrEvent } from '../nostr/types';
 
 export interface ComposerInput {
@@ -12,28 +12,46 @@ interface ComposerProps {
   replyTo?: NostrEvent;
   onClose: () => void;
   onSubmit: (input: ComposerInput) => Promise<void>;
+  mediaRelays?: string[];
+  onUpload?: (file: File, relay: string) => Promise<{ url: string; sha256?: string }>;
 }
 
-export function Composer({ open, replyTo, onClose, onSubmit }: ComposerProps) {
+export function Composer({ open, replyTo, onClose, onSubmit, mediaRelays = [], onUpload }: ComposerProps) {
   const [content, setContent] = useState('');
-  const [mediaUrl, setMediaUrl] = useState('');
-  const [mediaMagnet, setMediaMagnet] = useState('');
-  const [mediaSha, setMediaSha] = useState('');
   const [media, setMedia] = useState<ComposerInput['media']>([]);
+  const [selectedRelay, setSelectedRelay] = useState(mediaRelays[0] ?? '');
+  const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   if (!open) return null;
 
-  const handleAddMedia = () => {
-    if (!mediaUrl.trim()) return;
-    setMedia((prev) => [
-      ...prev,
-      { url: mediaUrl.trim(), magnet: mediaMagnet.trim() || undefined, sha256: mediaSha.trim() || undefined }
-    ]);
-    setMediaUrl('');
-    setMediaMagnet('');
-    setMediaSha('');
+  useEffect(() => {
+    if (!selectedRelay && mediaRelays.length > 0) {
+      setSelectedRelay(mediaRelays[0]);
+    }
+  }, [mediaRelays, selectedRelay]);
+
+  const handleUpload = async (file?: File) => {
+    if (!file) return;
+    if (!selectedRelay) {
+      setError('Select a media relay');
+      return;
+    }
+    if (!onUpload) {
+      setError('Upload service unavailable');
+      return;
+    }
+    setUploading(true);
+    setError(null);
+    try {
+      const result = await onUpload(file, selectedRelay);
+      setMedia((prev) => [...prev, { url: result.url, sha256: result.sha256 }]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Upload failed');
+    } finally {
+      setUploading(false);
+    }
   };
 
   const handleSubmit = async () => {
@@ -46,7 +64,8 @@ export function Composer({ open, replyTo, onClose, onSubmit }: ComposerProps) {
       setMedia([]);
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unable to send reply');
+      const fallback = replyTo ? 'Unable to send reply' : 'Unable to publish';
+      setError(err instanceof Error ? err.message : fallback);
     } finally {
       setSaving(false);
     }
@@ -56,7 +75,7 @@ export function Composer({ open, replyTo, onClose, onSubmit }: ComposerProps) {
     <div className="composer-backdrop">
       <div className="composer-panel">
         <div className="composer-header">
-          <div className="composer-title">Reply</div>
+          <div className="composer-title">{replyTo ? 'Reply' : 'New Post'}</div>
           <button className="composer-close" onClick={onClose}>
             <X size={16} />
           </button>
@@ -67,35 +86,55 @@ export function Composer({ open, replyTo, onClose, onSubmit }: ComposerProps) {
         {error && <div className="composer-error">{error}</div>}
         <textarea
           className="composer-textarea"
-          placeholder="Write your reply…"
+          placeholder={replyTo ? 'Write your reply…' : 'Write a new post…'}
           value={content}
           onChange={(event) => setContent(event.target.value)}
           rows={5}
         />
         <div className="composer-media">
           <div className="composer-row">
-            <label><Paperclip size={14} /> Media URL</label>
-            <input value={mediaUrl} onChange={(e) => setMediaUrl(e.target.value)} />
+            <label><Paperclip size={14} /> Media Relay</label>
+            <div className="composer-row-inline">
+              <select
+                className="composer-select"
+                value={selectedRelay}
+                onChange={(event) => setSelectedRelay(event.target.value)}
+              >
+                {mediaRelays.length === 0 && <option value="">No media relays</option>}
+                {mediaRelays.map((relay) => (
+                  <option key={relay} value={relay}>{relay}</option>
+                ))}
+              </select>
+              <label className="composer-icon" aria-label="Upload media">
+                <UploadCloud size={16} />
+                <input
+                  type="file"
+                  className="composer-file"
+                  onChange={(event) => handleUpload(event.target.files?.[0])}
+                />
+              </label>
+            </div>
+            {uploading && <div className="composer-sub">Uploading…</div>}
           </div>
-          <div className="composer-row">
-            <label><Magnet size={14} /> Magnet (optional)</label>
-            <input value={mediaMagnet} onChange={(e) => setMediaMagnet(e.target.value)} />
-          </div>
-          <div className="composer-row">
-            <label><Hash size={14} /> SHA256 (optional)</label>
-            <input value={mediaSha} onChange={(e) => setMediaSha(e.target.value)} />
-          </div>
-          <button className="composer-button" onClick={handleAddMedia}>Add media</button>
           {media.length > 0 && (
             <div className="composer-media-list">
               {media.map((item) => (
-                <div key={item.url}>{item.url}</div>
+                <div className="composer-media-chip" key={item.url}>
+                  <span>{item.url}</span>
+                  <button
+                    className="composer-icon"
+                    aria-label="Remove media"
+                    onClick={() => setMedia((prev) => prev.filter((entry) => entry.url !== item.url))}
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
               ))}
             </div>
           )}
         </div>
         <button className="composer-button primary" onClick={handleSubmit} disabled={saving}>
-          {saving ? 'Sending…' : 'Send reply'}
+          <Send size={16} /> {saving ? 'Sending…' : replyTo ? 'Send reply' : 'Publish'}
         </button>
       </div>
     </div>
