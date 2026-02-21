@@ -43,6 +43,12 @@ export class WorkerFeedService implements FeedServiceApi {
       this.fallback.subscribeTimeline(input);
       return;
     }
+    this.clearRetryTimer();
+    this.stopActiveRequest();
+    this.deliveryQueue.clear();
+    this.delivering = false;
+    if (this.deliveryTimer) globalThis.clearTimeout(this.deliveryTimer);
+    this.deliveryTimer = undefined;
     this.active = true;
     this.state = {
       authors: input.authors,
@@ -63,8 +69,7 @@ export class WorkerFeedService implements FeedServiceApi {
 
   stop() {
     this.active = false;
-    if (this.retryTimer) globalThis.clearTimeout(this.retryTimer);
-    this.retryTimer = undefined;
+    this.clearRetryTimer();
     if (this.deliveryTimer) globalThis.clearTimeout(this.deliveryTimer);
     this.deliveryTimer = undefined;
     this.deliveryQueue.clear();
@@ -73,9 +78,7 @@ export class WorkerFeedService implements FeedServiceApi {
       this.fallback.stop();
       return;
     }
-    if (!this.reqId) return;
-    this.post({ type: 'stop', reqId: this.reqId });
-    this.reqId = undefined;
+    this.stopActiveRequest();
   }
 
   destroy() {
@@ -100,9 +103,11 @@ export class WorkerFeedService implements FeedServiceApi {
     if (message.type === 'close') {
       this.state.onClose?.(message.reasons);
       if (!this.active) return;
+      this.clearRetryTimer();
       const jitter = Math.floor(Math.random() * 250);
       const delay = Math.min(this.backoffMs + jitter, 30_000);
       this.retryTimer = globalThis.setTimeout(() => {
+        this.retryTimer = undefined;
         if (!this.active || !this.reqId || !this.state) return;
         this.post({
           type: 'subscribe',
@@ -116,6 +121,18 @@ export class WorkerFeedService implements FeedServiceApi {
       return;
     }
     this.state.onClose?.([message.message]);
+  }
+
+  private stopActiveRequest() {
+    if (!this.reqId) return;
+    this.post({ type: 'stop', reqId: this.reqId });
+    this.reqId = undefined;
+  }
+
+  private clearRetryTimer() {
+    if (!this.retryTimer) return;
+    globalThis.clearTimeout(this.retryTimer);
+    this.retryTimer = undefined;
   }
 
   private post(message: FeedWorkerRequest) {
@@ -148,7 +165,7 @@ export class WorkerFeedService implements FeedServiceApi {
       processed += 1;
     }
     if (!this.deliveryQueue.isEmpty()) {
-      this.deliveryTimer = globalThis.setTimeout(() => this.flushEvents(), 0);
+      this.deliveryTimer = globalThis.setTimeout(() => this.flushEvents(), 16);
       return;
     }
     this.delivering = false;

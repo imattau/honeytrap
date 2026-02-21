@@ -2,38 +2,44 @@ import type { TorrentSnapshot } from './registry';
 import type { TorrentListService } from '../nostr/torrentList';
 
 export class TorrentSyncService {
-  private hydrateDone = false;
-  private publishTimer: number | null = null;
+  private hydratedForPubkey?: string;
+  private hydrateRequestId = 0;
+  private publishTimer?: ReturnType<typeof setTimeout>;
 
   constructor(private listService: TorrentListService) {}
 
   async hydrate(pubkey: string, onItems: (snapshot: TorrentSnapshot) => void) {
-    if (this.hydrateDone) return;
+    if (this.hydratedForPubkey === pubkey) return;
+    const requestId = ++this.hydrateRequestId;
     const items = await this.listService.load(pubkey);
-    if (items.length > 0) {
-      const snapshot: TorrentSnapshot = {};
-      items.forEach((item) => {
-        snapshot[item.magnet] = item;
-      });
-      onItems(snapshot);
-    }
-    this.hydrateDone = true;
+    if (requestId !== this.hydrateRequestId) return;
+    const snapshot: TorrentSnapshot = {};
+    items.forEach((item) => {
+      snapshot[item.magnet] = item;
+    });
+    onItems(snapshot);
+    this.hydratedForPubkey = pubkey;
   }
 
   schedulePublish(pubkey: string, snapshot: TorrentSnapshot) {
+    if (this.publishTimer) globalThis.clearTimeout(this.publishTimer);
+    this.publishTimer = undefined;
+    if (this.hydratedForPubkey !== pubkey) return;
     const items = Object.values(snapshot)
       .sort((a, b) => b.updatedAt - a.updatedAt)
       .slice(0, 100);
     if (items.length === 0) return;
-    if (this.publishTimer) window.clearTimeout(this.publishTimer);
-    this.publishTimer = window.setTimeout(() => {
+    this.publishTimer = globalThis.setTimeout(() => {
+      this.publishTimer = undefined;
+      if (this.hydratedForPubkey !== pubkey) return;
       this.listService.publish(items).catch(() => null);
     }, 10_000);
   }
 
   reset() {
-    this.hydrateDone = false;
-    if (this.publishTimer) window.clearTimeout(this.publishTimer);
-    this.publishTimer = null;
+    this.hydratedForPubkey = undefined;
+    this.hydrateRequestId += 1;
+    if (this.publishTimer) globalThis.clearTimeout(this.publishTimer);
+    this.publishTimer = undefined;
   }
 }

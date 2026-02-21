@@ -159,7 +159,8 @@ export function useFeedState({
 
   const applySettings = (next: AppSettings) => {
     const graph = new SocialGraph(next);
-    timelineCache.set(graph.filterEvents(eventsRef.current));
+    const base = graph.filterEvents(eventsRef.current);
+    timelineCache.set(filterByFeedMode(base, next, followers));
   };
 
   useEffect(() => {
@@ -189,4 +190,18 @@ export function useFeedState({
     findEventById,
     orchestrator
   };
+}
+
+function filterByFeedMode(events: NostrEvent[], settings: AppSettings, followers: string[]): NostrEvent[] {
+  if (settings.feedMode === 'all') return events;
+  const followsSet = new Set(settings.follows);
+  const followersSet = new Set(followers);
+  if (settings.feedMode === 'follows') {
+    return events.filter((event) => followsSet.has(event.pubkey));
+  }
+  if (settings.feedMode === 'followers') {
+    return events.filter((event) => followersSet.has(event.pubkey));
+  }
+  const both = new Set<string>([...settings.follows, ...followers]);
+  return events.filter((event) => both.has(event.pubkey));
 }

@@ -1,4 +1,5 @@
 import type { NostrEvent } from './types';
+import { extractHttpUrls } from './urlExtract';
 
 const mediaExtensions = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.mp4', '.webm', '.mov'];
 
@@ -36,7 +37,6 @@ export function extractMedia(event: NostrEvent): MediaSource[] {
 }
 
 function extractUrls(text: string): string[] {
-  const regex = /(https?:\/\/[^\s]+)/g;
-  const matches = text.match(regex) ?? [];
+  const matches = extractHttpUrls(text);
   return matches.filter((url) => mediaExtensions.some((ext) => url.toLowerCase().includes(ext)));
 }

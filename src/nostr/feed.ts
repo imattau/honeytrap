@@ -135,6 +135,9 @@ export class FeedOrchestrator implements FeedOrchestratorApi {
     const merged = this.flush(this.lastGetEvents());
     this.lastOnUpdate(merged);
     this.lastOnPending?.(0);
+    if (this.lastOnProfiles) {
+      this.queueProfilesForEvents(merged, this.lastOnProfiles);
+    }
   }
 
   flushPending(getEvents: () => NostrEvent[], onUpdate: (events: NostrEvent[]) => void) {
@@ -269,11 +272,16 @@ export class FeedOrchestrator implements FeedOrchestratorApi {
     if (normalizedTags.length > 0 && !matchesTag(event, normalizedTags)) return;
     if (this.knownIds.has(event.id)) return;
     this.knownIds.add(event.id);
+    // Always queue the profile so names load even for events buffered while paused.
+    if (!this.profiles[event.pubkey] && !this.profileInflight.has(event.pubkey)) {
+      this.profileQueue.add(event.pubkey);
+    }
     if (this.paused && this.hydrated) {
       this.pending.push(event);
       if (this.pending.length > MAX_BUFFER) {
         this.pending.splice(0, this.pending.length - MAX_BUFFER);
       }
+      this.drainProfiles(onProfiles);
       return;
     }
     this.markTransport(event);

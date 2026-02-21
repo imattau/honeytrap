@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { KeyRound, LogOut, QrCode, ShieldAlert, UserCircle, X } from 'lucide-react';
+import { flushSync } from 'react-dom';
+import { Bell, KeyRound, List, LogOut, PencilLine, QrCode, Search, ShieldAlert, UserCircle, X } from 'lucide-react';
 import { QRCodeCanvas } from 'qrcode.react';
 import { useAppState } from './AppState';
 import { createNostrConnectRequest, decodeKey } from '../nostr/auth';
@@ -26,6 +27,7 @@ export function Drawer() {
     relayStatus,
     refreshRelayStatus,
     saveMediaRelays,
+    publishRelayList,
     saveP2PSettings,
     saveKeyRecord,
     clearKeys,
@@ -176,7 +178,9 @@ export function Drawer() {
   };
 
   const handleSaveRelays = () => {
-    setSettings(menuState.applyRelays(settings));
+    const next = menuState.applyRelays(settings);
+    setSettings(next);
+    publishRelayList(next.relays).catch(() => null);
     setSavedSection('relays');
   };
 
@@ -320,13 +324,13 @@ export function Drawer() {
                   tabIndex={0}
                   onClick={() => {
                     if (!keys?.npub) return;
-                    navigate(`/author/${keys.npub}`);
+                    flushSync(() => navigate(`/author/${keys.npub}`));
                     if (!isWide) setOpen(false);
                   }}
                   onKeyDown={(event) => {
                     if (event.key === 'Enter' || event.key === ' ') {
                       event.preventDefault();
-                      if (keys?.npub) navigate(`/author/${keys.npub}`);
+                      if (keys?.npub) flushSync(() => navigate(`/author/${keys.npub}`));
                       if (!isWide) setOpen(false);
                     }
                   }}
@@ -367,6 +371,32 @@ export function Drawer() {
                     else setFeedMode('follows');
                   }}
                 />
+              </div>
+              <div className="menu-row">
+                <button type="button" className="menu-button" onClick={() => {
+                  flushSync(() => navigate('/search'));
+                  if (!isWide) setOpen(false);
+                }}>
+                  <Search size={14} /> Search
+                </button>
+                <button type="button" className="menu-button" onClick={() => {
+                  flushSync(() => navigate('/notifications'));
+                  if (!isWide) setOpen(false);
+                }}>
+                  <Bell size={14} /> Notifications
+                </button>
+                <button type="button" className="menu-button" onClick={() => {
+                  flushSync(() => navigate('/lists'));
+                  if (!isWide) setOpen(false);
+                }}>
+                  <List size={14} /> Lists
+                </button>
+                <button type="button" className="menu-button" onClick={() => {
+                  flushSync(() => navigate('/profile/edit'));
+                  if (!isWide) setOpen(false);
+                }}>
+                  <PencilLine size={14} /> Edit profile
+                </button>
               </div>
             </MenuSection>
 

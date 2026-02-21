@@ -6,7 +6,7 @@ import type { FeedServiceApi } from './contracts';
 export class FeedService implements FeedServiceApi {
   private unsub?: () => void;
   private backoffMs = 600;
-  private retryTimer?: number;
+  private retryTimer?: ReturnType<typeof setTimeout>;
   private active = false;
   private lastAuthors?: string[];
   private lastTags?: string[];
@@ -41,8 +41,10 @@ export class FeedService implements FeedServiceApi {
 
   stop() {
     this.active = false;
-    if (this.retryTimer) window.clearTimeout(this.retryTimer);
+    if (this.retryTimer) globalThis.clearTimeout(this.retryTimer);
+    this.retryTimer = undefined;
     this.unsub?.();
+    this.unsub = undefined;
   }
 
   private async startSubscription() {
@@ -54,9 +56,11 @@ export class FeedService implements FeedServiceApi {
     this.unsub = await this.client.subscribe(filters, this.lastHandler, (reasons) => {
       this.lastOnClose?.(reasons);
       if (!this.active) return;
+      if (this.retryTimer) globalThis.clearTimeout(this.retryTimer);
       const jitter = Math.floor(Math.random() * 250);
       const delay = Math.min(this.backoffMs + jitter, 30_000);
-      this.retryTimer = window.setTimeout(() => {
+      this.retryTimer = globalThis.setTimeout(() => {
+        this.retryTimer = undefined;
         this.startSubscription();
       }, delay);
       this.backoffMs = Math.min(this.backoffMs * 1.7, 30_000);

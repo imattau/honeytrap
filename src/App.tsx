@@ -7,11 +7,16 @@ import { PostCard } from './ui/PostCard';
 import { ThreadStack } from './ui/ThreadStack';
 import { AuthorView } from './ui/AuthorView';
 import { HashtagView } from './ui/HashtagView';
+import { LongFormView } from './ui/LongFormView';
 import { FabButton } from './ui/FabButton';
 import { Composer } from './ui/Composer';
 import { P2PStatusBar } from './ui/P2PStatusBar';
 import { openThread } from './ui/threadNavigation';
 import type { NostrEvent } from './nostr/types';
+import { SearchView } from './ui/SearchView';
+import { NotificationsView } from './ui/NotificationsView';
+import { ProfileEditView } from './ui/ProfileEditView';
+import { ListsView } from './ui/ListsView';
 
 const FEED_SCROLL_KEY = 'honeytrap:feed-scroll-top';
 
@@ -29,7 +34,11 @@ function Feed() {
     mediaRelayList,
     settings,
     attachMedia,
-    torrents
+    torrents,
+    setFeedMode,
+    followers,
+    following,
+    keys
   } = useAppState();
   const [composerOpen, setComposerOpen] = useState(false);
   const [replyTarget, setReplyTarget] = useState<NostrEvent | undefined>(undefined);
@@ -45,6 +54,7 @@ function Feed() {
   const loadOlderInFlightRef = useRef(false);
   const lastLoadOlderAttemptRef = useRef(0);
   const lastAutoFlushRef = useRef(0);
+  const isTouch = window.matchMedia('(pointer: coarse)').matches;
 
   useEffect(() => {
     if (location.pathname !== '/') return;
@@ -90,12 +100,17 @@ function Feed() {
     <div
       className="feed-shell"
       onTouchStart={(event) => {
+        if (isInteractiveTarget(event.target)) return;
         const scroller = scrollerRef.current;
         if (!scroller || scroller.scrollTop > 0) return;
         pullStartRef.current = event.touches[0]?.clientY ?? null;
       }}
       onTouchMove={(event) => {
         if (pullStartRef.current === null) return;
+        if (isInteractiveTarget(event.target)) {
+          pullStartRef.current = null;
+          return;
+        }
         const current = event.touches[0]?.clientY ?? pullStartRef.current;
         const distance = Math.max(0, current - pullStartRef.current);
         const capped = Math.min(distance, 120);
@@ -110,6 +125,7 @@ function Feed() {
         setPullReady(false);
       }}
       onWheel={(event) => {
+        if (isInteractiveTarget(event.target)) return;
         const scroller = scrollerRef.current;
         if (!scroller || scroller.scrollTop > 0) return;
         if (event.deltaY >= 0) return;
@@ -131,6 +147,32 @@ function Feed() {
         className={`progress-line ${feedLoading || pendingCount > 0 ? 'active' : ''} ${pendingCount > 0 ? 'pulse' : ''}`}
         aria-hidden="true"
       />
+      <div className="feed-toolbar">
+        <div className="feed-mode-switcher">
+          <button type="button" className={`feed-mode-pill ${settings.feedMode === 'all' ? 'active' : ''}`} onClick={() => setFeedMode('all')}>
+            Global
+          </button>
+          <button type="button" className={`feed-mode-pill ${settings.feedMode === 'follows' ? 'active' : ''}`} onClick={() => setFeedMode('follows')}>
+            Following ({following.length})
+          </button>
+          <button type="button" className={`feed-mode-pill ${settings.feedMode === 'followers' ? 'active' : ''}`} onClick={() => setFeedMode('followers')}>
+            Followers ({followers.length})
+          </button>
+          <button type="button" className={`feed-mode-pill ${settings.feedMode === 'both' ? 'active' : ''}`} onClick={() => setFeedMode('both')}>
+            Both
+          </button>
+        </div>
+        <div className="feed-toolbar-actions">
+          <button type="button" className="feed-search-button" onClick={() => navigate('/search')}>
+            Search
+          </button>
+          {!isTouch && pendingCount > 0 && (
+            <button type="button" className="feed-pending-button" onClick={() => flushPending()}>
+              {pendingCount} new post{pendingCount === 1 ? '' : 's'} - show now
+            </button>
+          )}
+        </div>
+      </div>
       <div className={`feed-pull ${pullReady ? 'ready' : ''}`} style={{ height: pullDistance }}>
         <span>{pullReady ? 'Release to load new posts' : 'Pull to refresh'}</span>
       </div>
@@ -150,6 +192,15 @@ function Feed() {
         startReached={() => flushPendingSafe()}
         atTopStateChange={(atTop) => {
           if (atTop) flushPendingSafe();
+        }}
+        components={{
+          EmptyPlaceholder: () => (
+            <FeedEmptyState
+              authed={Boolean(keys?.npub)}
+              hasFollows={following.length > 0}
+              onSearch={() => navigate('/search')}
+            />
+          )
         }}
         itemContent={(_, event) => (
           <div className="feed-item">
@@ -190,21 +241,77 @@ function Feed() {
   );
 }
 
+function isInteractiveTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof Element)) return false;
+  return Boolean(target.closest('button, a, input, textarea, select, summary, [role=\"button\"]'));
+}
+
 function AppRoutes() {
   const location = useLocation();
   const { setPaused } = useFeedControlState();
+  const [routeLocation, setRouteLocation] = useState(() => currentRouteLocation());
 
   useEffect(() => {
-    setPaused(location.pathname !== '/');
-  }, [location.pathname, setPaused]);
+    ensureHistoryNavigationEvents();
+    const update = () => {
+      setRouteLocation(currentRouteLocation());
+    };
+    window.addEventListener('popstate', update);
+    window.addEventListener('honeytrap:navigate', update as EventListener);
+    return () => {
+      window.removeEventListener('popstate', update);
+      window.removeEventListener('honeytrap:navigate', update as EventListener);
+    };
+  }, []);
+
+  useEffect(() => {
+    setPaused(routeLocation.pathname !== '/');
+  }, [routeLocation.pathname, setPaused]);
 
   return (
-    <Routes>
+    <Routes location={routeLocation}>
+      <Route path="/search" element={<SearchView key={routeLocation.pathname} />} />
+      <Route path="/search/" element={<SearchView key={routeLocation.pathname} />} />
+      <Route path="/notifications" element={<NotificationsView key={routeLocation.pathname} />} />
+      <Route path="/notifications/" element={<NotificationsView key={routeLocation.pathname} />} />
+      <Route path="/article/:id" element={<LongFormView key={routeLocation.pathname} />} />
+      <Route path="/profile/edit" element={<ProfileEditView key={routeLocation.pathname} />} />
+      <Route path="/profile/edit/" element={<ProfileEditView key={routeLocation.pathname} />} />
+      <Route path="/lists" element={<ListsView key={routeLocation.pathname} />} />
+      <Route path="/lists/" element={<ListsView key={routeLocation.pathname} />} />
+      <Route path="/thread/:id" element={<ThreadStack key={routeLocation.pathname} />} />
+      <Route path="/author/:pubkey" element={<AuthorView key={routeLocation.pathname} />} />
+      <Route path="/tag/:tag" element={<HashtagView key={routeLocation.pathname} />} />
       <Route path="/" element={<Feed />} />
-      <Route path="/thread/:id" element={<ThreadStack key={location.pathname} />} />
-      <Route path="/author/:pubkey" element={<AuthorView key={location.pathname} />} />
-      <Route path="/tag/:tag" element={<HashtagView key={location.pathname} />} />
+      <Route path="*" element={<Feed />} />
     </Routes>
+  );
+}
+
+function FeedEmptyState({
+  authed,
+  hasFollows,
+  onSearch
+}: {
+  authed: boolean;
+  hasFollows: boolean;
+  onSearch: () => void;
+}) {
+  return (
+    <div className="feed-empty-state">
+      {!authed ? (
+        <>
+          <div className="feed-empty-title">Welcome to Honeytrap</div>
+          <div className="feed-empty-copy">Open Menu, sign in with NIP-07/NIP-46, then load your feed.</div>
+        </>
+      ) : (
+        <>
+          <div className="feed-empty-title">Your feed is empty</div>
+          <div className="feed-empty-copy">{hasFollows ? 'No posts found yet from your selected mode.' : 'Follow people or switch to Global mode to discover posts.'}</div>
+        </>
+      )}
+      <button className="feed-empty-action" onClick={onSearch}>Open search</button>
+    </div>
   );
 }
 
@@ -219,4 +326,37 @@ export default function App() {
       </BrowserRouter>
     </AppStateProvider>
   );
+}
+
+function currentRouteLocation() {
+  return {
+    pathname: normalizePath(window.location.pathname),
+    search: window.location.search,
+    hash: window.location.hash,
+    state: window.history.state,
+    key: `${window.location.pathname}${window.location.search}${window.location.hash}`
+  };
+}
+
+function normalizePath(pathname: string): string {
+  if (pathname === '/') return pathname;
+  return pathname.replace(/\/+$/, '');
+}
+
+function ensureHistoryNavigationEvents() {
+  const tag = '__honeytrapHistoryPatched';
+  const historyAny = window.history as History & { [tag]?: boolean };
+  if (historyAny[tag]) return;
+  historyAny[tag] = true;
+  const emit = () => window.dispatchEvent(new Event('honeytrap:navigate'));
+  const originalPushState = window.history.pushState.bind(window.history);
+  const originalReplaceState = window.history.replaceState.bind(window.history);
+  window.history.pushState = function pushState(...args) {
+    originalPushState(...args);
+    emit();
+  };
+  window.history.replaceState = function replaceState(...args) {
+    originalReplaceState(...args);
+    emit();
+  };
 }

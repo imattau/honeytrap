@@ -1,5 +1,7 @@
 import type { EventSigner } from './signer';
 import { sha256Hex } from '../p2p/verify';
+import { hexToBytes } from 'nostr-tools/utils';
+import { base64 } from '@scure/base';
 
 export interface UploadResult {
   url: string;
@@ -12,7 +14,7 @@ export class MediaUploadService {
   async upload(file: File, relayBase: string, onProgress?: (percent: number) => void): Promise<UploadResult> {
     const apiUrl = await this.resolveApiUrl(relayBase);
     const payloadHash = await sha256Hex(await file.arrayBuffer());
-    const payloadBase64 = toBase64Hex(payloadHash);
+    const payloadBase64 = hexToBase64(payloadHash);
     const authEvent = await this.signer.signEvent({
       kind: 27235,
       created_at: Math.floor(Date.now() / 1000),
@@ -99,12 +101,8 @@ export class MediaUploadService {
   }
 }
 
-function toBase64Hex(hex: string): string {
-  const bytes = hex.match(/.{1,2}/g)?.map((byte) => parseInt(byte, 16)) ?? [];
-  const uint8 = new Uint8Array(bytes);
-  let binary = '';
-  uint8.forEach((b) => { binary += String.fromCharCode(b); });
-  return btoa(binary);
+function hexToBase64(hex: string): string {
+  return base64.encode(hexToBytes(hex));
 }
 
 function dedupeRelays(relays: string[], preferredRelay?: string) {

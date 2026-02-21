@@ -7,12 +7,13 @@ import type { ListDescriptor, NostrEvent, ProfileMetadata, TrackItem } from './t
 import { getAllTagValues, getTagValue } from './utils';
 import type { NostrClientApi } from './contracts';
 import type { NostrCache } from './cache';
+import { normalizeRelayUrl } from './relayUrl';
 
 // Maximum number of concurrent querySync calls (each opens a live REQ on the
 // relay).  Nostr relays typically enforce 10-20 simultaneous subscriptions per
 // connection; the feed subscription itself is always open, so leave generous
-// headroom by capping ad-hoc queries at 4 concurrent REQs.
-const MAX_CONCURRENT_QUERIES = 4;
+// headroom by capping ad-hoc queries at 8 concurrent REQs.
+const MAX_CONCURRENT_QUERIES = 8;
 
 export class NostrClient implements NostrClientApi {
   private pool = new SimplePool({ enablePing: true, enableReconnect: true });
@@ -22,7 +23,7 @@ export class NostrClient implements NostrClientApi {
   private queryLimit = pLimit(MAX_CONCURRENT_QUERIES);
 
   setRelays(relays: string[]) {
-    const next = Array.from(new Set(relays.map((url) => url.trim()).filter(Boolean)));
+    const next = Array.from(new Set(relays.map(normalizeRelayUrl).filter(Boolean))) as string[];
     const nextSet = new Set(next);
     const removed = Array.from(this.relaySet).filter((url) => !nextSet.has(url));
     const added = next.filter((url) => !this.relaySet.has(url));
@@ -61,6 +62,35 @@ export class NostrClient implements NostrClientApi {
   async fetchProfile(pubkey: string): Promise<ProfileMetadata | undefined> {
     const result = await this.fetchProfiles([pubkey]);
     return result[pubkey];
+  }
+
+  async searchProfiles(query: string, limit = 40): Promise<Record<string, ProfileMetadata>> {
+    const trimmed = query.trim();
+    if (!trimmed) return {};
+    const normalized = trimmed.toLowerCase();
+    const filter = { kinds: [0], limit } as Filter & { search?: string };
+    filter.search = trimmed;
+    let events = await this.safeQuerySync(filter);
+    if (events.length === 0) {
+      events = await this.safeQuerySync({ kinds: [0], limit: Math.max(limit * 3, 120) });
+    }
+    const sorted = events
+      .slice()
+      .sort((a, b) => b.created_at - a.created_at || b.id.localeCompare(a.id));
+    const out: Record<string, ProfileMetadata> = {};
+    for (const event of sorted) {
+      if (event.pubkey in out) continue;
+      const parsed = parseProfileEvent(event);
+      if (!parsed) continue;
+      const haystack = [parsed.display_name, parsed.name, parsed.about, parsed.nip05, parsed.website]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+      if (events.length > limit && !haystack.includes(normalized)) continue;
+      out[event.pubkey] = parsed;
+      if (Object.keys(out).length >= limit) break;
+    }
+    return out;
   }
 
   async fetchProfiles(pubkeys: string[]): Promise<Record<string, ProfileMetadata>> {
@@ -214,6 +244,66 @@ export class NostrClient implements NostrClientApi {
     return event;
   }
 
+  async searchEvents(query: string, limit = 40): Promise<NostrEvent[]> {
+    const trimmed = query.trim();
+    if (!trimmed) return [];
+    const normalized = trimmed.toLowerCase();
+    const filter = { kinds: [1, 30023], limit } as Filter & { search?: string };
+    filter.search = trimmed;
+    let events = await this.safeQuerySync(filter);
+    if (events.length === 0) {
+      events = await this.safeQuerySync({ kinds: [1, 30023], limit: Math.max(limit * 4, 160) });
+    }
+    const deduped = new Map<string, NostrEvent>();
+    for (const event of events) {
+      if (deduped.has(event.id)) continue;
+      const title = getTagValue(event.tags, 'title') ?? '';
+      const summary = getTagValue(event.tags, 'summary') ?? '';
+      const haystack = `${event.content} ${title} ${summary}`.toLowerCase();
+      if (events.length > limit && !haystack.includes(normalized)) continue;
+      deduped.set(event.id, event);
+      if (deduped.size >= limit) break;
+    }
+    return Array.from(deduped.values())
+      .sort((a, b) => b.created_at - a.created_at || b.id.localeCompare(a.id));
+  }
+
+  async fetchEventsByIds(ids: string[]): Promise<NostrEvent[]> {
+    if (ids.length === 0) return [];
+    const result: NostrEvent[] = [];
+    const missing: string[] = [];
+    await Promise.all(ids.map(async (id) => {
+      const cached = await this.cache?.getEvent(id);
+      if (cached) result.push(cached);
+      else missing.push(id);
+    }));
+    if (missing.length > 0) {
+      const fetched = await this.safeQuerySync({ ids: missing, limit: missing.length });
+      await Promise.all(fetched.map((e) => this.cache?.setEvent(e as NostrEvent)));
+      result.push(...fetched as NostrEvent[]);
+    }
+    return result;
+  }
+
+  async fetchMentions(pubkey: string, { until, limit = 50 }: { until?: number; limit?: number } = {}): Promise<NostrEvent[]> {
+    const filter = { kinds: [1, 7, 9735], '#p': [pubkey], limit } as Filter;
+    if (until) filter.until = until;
+    const events = await this.safeQuerySync(filter);
+    const sorted = (events as NostrEvent[])
+      .slice()
+      .sort((a, b) => b.created_at - a.created_at || b.id.localeCompare(a.id));
+    await this.cache?.setEvents(sorted);
+    return sorted;
+  }
+
+  async subscribeMentions(
+    pubkey: string,
+    onEvent: (event: NostrEvent) => void,
+    onClose?: (reasons: string[]) => void
+  ): Promise<() => void> {
+    return this.subscribe([{ kinds: [1, 7, 9735], '#p': [pubkey], limit: 100 } as Filter], onEvent, onClose);
+  }
+
   async publishEvent(event: NostrEvent): Promise<void> {
     await this.publishToRelays(event);
   }
@@ -331,4 +421,12 @@ function errorMessage(reason: unknown): string {
   if (reason instanceof Error && reason.message) return reason.message;
   if (typeof reason === 'string') return reason;
   return '';
+}
+
+function parseProfileEvent(event: NostrEvent): ProfileMetadata | undefined {
+  try {
+    return JSON.parse(event.content) as ProfileMetadata;
+  } catch {
+    return undefined;
+  }
 }

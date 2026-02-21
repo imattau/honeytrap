@@ -17,6 +17,11 @@ export function useRelayState({
   const [mediaRelayList, setMediaRelayList] = useState<string[]>([]);
   const [relayStatus, setRelayStatus] = useState<Record<string, boolean>>({});
   const fetchRef = useRef({ relaysAt: 0, mediaRelaysAt: 0 });
+  const settingsRef = useRef(settings);
+
+  useEffect(() => {
+    settingsRef.current = settings;
+  }, [settings]);
 
   const refreshRelayStatus = useCallback(() => {
     const status = nostr.getRelayStatus();
@@ -38,14 +43,14 @@ export function useRelayState({
         if (!active) return;
         setRelayList(list);
         if (list.length === 0) return;
-        if (sameSet(list, settings.relays)) return;
-        updateSettings({ ...settings, relays: list });
+        if (sameSet(list, settingsRef.current.relays)) return;
+        updateSettings({ ...settingsRef.current, relays: list });
       })
       .catch(() => null);
     return () => {
       active = false;
     };
-  }, [keysNpub, settings.relays, nostr, updateSettings, settings]);
+  }, [keysNpub, settings.relays, nostr, updateSettings]);
 
   useEffect(() => {
     if (!keysNpub) return;
@@ -58,14 +63,14 @@ export function useRelayState({
         if (!active) return;
         setMediaRelayList(list);
         if (list.length === 0) return;
-        if (sameSet(list, settings.mediaRelays)) return;
-        updateSettings({ ...settings, mediaRelays: list });
+        if (sameSet(list, settingsRef.current.mediaRelays)) return;
+        updateSettings({ ...settingsRef.current, mediaRelays: list });
       })
       .catch(() => null);
     return () => {
       active = false;
     };
-  }, [keysNpub, settings.mediaRelays, nostr, updateSettings, settings]);
+  }, [keysNpub, settings.mediaRelays, nostr, updateSettings]);
 
   return { relayList, mediaRelayList, relayStatus, refreshRelayStatus };
 }

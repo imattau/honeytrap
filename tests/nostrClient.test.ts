@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { NostrClient } from '../src/nostr/client';
 import type { NostrEvent } from '../src/nostr/types';
 
@@ -19,6 +19,43 @@ describe('NostrClient.fetchOlderTimeline', () => {
     });
 
     expect(captured['#t']).toEqual(['hello', 'world', 'test']);
+  });
+});
+
+describe('NostrClient.setRelays', () => {
+  it('normalizes and deduplicates relay urls with nostr-tools normalizeURL', () => {
+    const client = new NostrClient();
+    const ensureRelay = vi.fn(async () => undefined);
+    const close = vi.fn();
+    (client as any).pool = { ensureRelay, close };
+
+    client.setRelays([
+      'relay.example.com',
+      'wss://relay.example.com/',
+      'https://second.example.com/',
+      'invalid relay value'
+    ]);
+
+    expect((client as any).relays).toEqual([
+      'wss://relay.example.com/',
+      'wss://second.example.com/'
+    ]);
+    expect(ensureRelay).toHaveBeenCalledTimes(2);
+    expect(close).not.toHaveBeenCalled();
+  });
+
+  it('closes removed normalized relays', () => {
+    const client = new NostrClient();
+    const ensureRelay = vi.fn(async () => undefined);
+    const close = vi.fn();
+    (client as any).pool = { ensureRelay, close };
+    (client as any).relays = ['wss://relay.one/', 'wss://relay.two/'];
+    (client as any).relaySet = new Set(['wss://relay.one/', 'wss://relay.two/']);
+
+    client.setRelays(['wss://relay.one/']);
+
+    expect((client as any).relays).toEqual(['wss://relay.one/']);
+    expect(close).toHaveBeenCalledWith(['wss://relay.two/']);
   });
 });
 

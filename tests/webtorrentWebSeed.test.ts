@@ -104,4 +104,35 @@ describe('WebTorrentAssist webseed', () => {
     assist.ensureWebSeed(source, false);
     expect(ensureMock).not.toHaveBeenCalled();
   });
+
+  it('destroys a tracked torrent on timeout before ready', async () => {
+    vi.useFakeTimers();
+    const destroy = vi.fn();
+    const once = vi.fn();
+    const torrent = {
+      files: [],
+      ready: false,
+      once,
+      on: () => null,
+      destroy
+    };
+    const assist = new WebTorrentAssist(makeSettings(), undefined, {
+      getClient,
+      ensure: ensureMock
+    } as any);
+
+    ensureMock.mockImplementation((_magnet, onAdd) => {
+      onAdd(torrent as any);
+      return torrent as any;
+    });
+
+    const source = makeSource();
+    const pending = (assist as any).addTorrent(source.magnet!, 5, source);
+    vi.advanceTimersByTime(10);
+    const result = await pending;
+
+    expect(result).toBeUndefined();
+    expect(destroy).toHaveBeenCalledTimes(1);
+    vi.useRealTimers();
+  });
 });

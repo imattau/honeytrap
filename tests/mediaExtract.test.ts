@@ -40,4 +40,12 @@ describe('extractMedia', () => {
     expect(media[0].magnet).toBe('magnet:?xt=urn:btih:xyz');
     expect(media[0].sha256).toBe('abc123');
   });
+
+  it('extracts clean media urls from content with trailing punctuation', () => {
+    const event = baseEvent();
+    event.content = 'Look: https://cdn.example.com/cat.jpg).';
+    const media = extractMedia(event);
+    expect(media).toHaveLength(1);
+    expect(media[0].url).toBe('https://cdn.example.com/cat.jpg');
+  });
 });

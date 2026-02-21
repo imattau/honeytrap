@@ -103,6 +103,21 @@ describe('WorkerFeedService', () => {
     expect(stop.reqId).toBe(subscribe.reqId);
   });
 
+  it('stops previous worker request before replacing subscription', () => {
+    const service = new WorkerFeedService({} as any);
+    service.subscribeTimeline({ authors: ['alice'], onEvent: () => null });
+    const firstSubscribe = instance.messages.find((message) => message.type === 'subscribe');
+
+    service.subscribeTimeline({ authors: ['bob'], onEvent: () => null });
+
+    const stopMessages = instance.messages.filter((message) => message.type === 'stop');
+    const subscribeMessages = instance.messages.filter((message) => message.type === 'subscribe');
+    expect(subscribeMessages).toHaveLength(2);
+    expect(stopMessages).toHaveLength(1);
+    expect(stopMessages[0].reqId).toBe(firstSubscribe.reqId);
+    expect(subscribeMessages[1].authors).toEqual(['bob']);
+  });
+
   it('retries with original filters after close', () => {
     vi.useFakeTimers();
     const service = new WorkerFeedService({} as any);
@@ -121,6 +136,21 @@ describe('WorkerFeedService', () => {
     const retry = retries[retries.length - 1];
     expect(retry.authors).toEqual(['alice']);
     expect(retry.tags).toEqual(['nostr']);
+    vi.useRealTimers();
+  });
+
+  it('keeps a single pending retry when multiple close messages arrive', () => {
+    vi.useFakeTimers();
+    const service = new WorkerFeedService({} as any);
+    service.subscribeTimeline({ authors: ['alice'], onEvent: () => null });
+    const subscribe = instance.messages.find((message) => message.type === 'subscribe');
+
+    instance.emit({ type: 'close', reqId: subscribe.reqId, reasons: ['closed-1'] });
+    instance.emit({ type: 'close', reqId: subscribe.reqId, reasons: ['closed-2'] });
+    vi.runAllTimers();
+
+    const retries = instance.messages.filter((message) => message.type === 'subscribe');
+    expect(retries).toHaveLength(2);
     vi.useRealTimers();
   });
 });

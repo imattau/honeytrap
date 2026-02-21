@@ -4,6 +4,7 @@ import { bytesToHex, hexToBytes } from 'nostr-tools/utils';
 import { nip04 } from 'nostr-tools';
 import { nip44 } from 'nostr-tools';
 import type { NostrEvent } from './types';
+import { normalizeRelayUrl } from './relayUrl';
 
 export type NwcEncryption = 'nip04' | 'nip44_v2';
 
@@ -24,7 +25,7 @@ export class NwcClient {
     const rawPubkey = url.hostname || url.pathname.replace('/', '');
     const walletPubkey = normalizePubkey(rawPubkey);
     if (!walletPubkey) throw new Error('Missing wallet pubkey in NWC URI');
-    const relays = url.searchParams.getAll('relay').filter(Boolean);
+    const relays = Array.from(new Set(url.searchParams.getAll('relay').map(normalizeRelayUrl).filter(Boolean))) as string[];
     const secretRaw = url.searchParams.get('secret') ?? '';
     const secret = normalizeSecret(secretRaw);
     if (!secret) throw new Error('Missing secret in NWC URI');
@@ -86,7 +87,25 @@ export class NwcClient {
 
   private waitForResponse(requestId: string, timeoutMs: number): Promise<void> {
     return new Promise((resolve, reject) => {
-      const sub = this.pool.subscribe(this.connection.relays, {
+      let settled = false;
+      let sub: { close: (reason?: string) => void } | undefined;
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const finish = (error?: Error) => {
+        if (settled) return;
+        settled = true;
+        sub?.close(error ? 'error' : 'done');
+        if (timer) {
+          globalThis.clearTimeout(timer);
+          timer = undefined;
+        }
+        if (error) {
+          reject(error);
+          return;
+        }
+        resolve();
+      };
+
+      sub = this.pool.subscribe(this.connection.relays, {
         kinds: [23195],
         authors: [this.connection.walletPubkey],
         '#e': [requestId],
@@ -97,23 +116,20 @@ export class NwcClient {
             const decrypted = this.decryptPayload(event.content);
             const response = JSON.parse(decrypted);
             if (response.error) {
-              reject(new Error(response.error.message ?? 'Wallet error'));
+              finish(new Error(response.error.message ?? 'Wallet error'));
               return;
             }
-            resolve();
+            finish();
           } catch (error) {
-            reject(error instanceof Error ? error : new Error('Failed to parse wallet response'));
-          } finally {
-            sub.close('done');
-            window.clearTimeout(timer);
+            finish(error instanceof Error ? error : new Error('Failed to parse wallet response'));
           }
         },
         onclose: () => null
       });
 
-      const timer = window.setTimeout(() => {
-        sub.close('timeout');
-        reject(new Error('Wallet response timed out'));
+      timer = globalThis.setTimeout(() => {
+        sub?.close('timeout');
+        finish(new Error('Wallet response timed out'));
       }, timeoutMs);
     });
   }

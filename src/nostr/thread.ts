@@ -28,9 +28,10 @@ export class ThreadService implements ThreadServiceApi {
     if (this.isBlocked?.(target.pubkey)) return [];
     this.markTransport(target);
 
-    const ancestors = await this.loadAncestors(target);
-    const replies = (await this.client.fetchReplies(target.id))
-      .filter((reply) => !this.isBlocked?.(reply.pubkey));
+    const [ancestors, replies] = await Promise.all([
+      this.loadAncestors(target),
+      this.client.fetchReplies(target.id).then((r) => r.filter((reply) => !this.isBlocked?.(reply.pubkey)))
+    ]);
     replies.forEach((reply) => {
       this.markTransport(reply);
     });
@@ -61,13 +62,24 @@ export class ThreadService implements ThreadServiceApi {
   }
 
   private async loadAncestors(event: NostrEvent): Promise<NostrEvent[]> {
+    // Batch-fetch all IDs mentioned in e-tags — most clients include the full
+    // ancestor chain, so this resolves the common case in a single relay query.
+    const eTagIds = event.tags.filter((t) => t[0] === 'e').map((t) => t[1]).filter(Boolean);
+    const prefetched = new Map<string, NostrEvent>();
+    if (eTagIds.length > 0) {
+      const fetched = await this.client.fetchEventsByIds(eTagIds);
+      for (const ev of fetched) prefetched.set(ev.id, ev);
+    }
+
+    // Walk the chain using prefetched events; fall back to individual queries
+    // only for any gaps not covered by the e-tags.
     const chain: NostrEvent[] = [];
     let current: NostrEvent | undefined = event;
     while (current) {
       chain.unshift(current);
       const parentId = getReplyParentId(current);
       if (!parentId) break;
-      const parent = await this.client.fetchEventById(parentId);
+      const parent = prefetched.get(parentId) ?? await this.client.fetchEventById(parentId);
       if (!parent) break;
       current = parent;
     }

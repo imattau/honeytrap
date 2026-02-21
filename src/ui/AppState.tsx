@@ -1,7 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { defaultSettings } from '../storage/defaults';
 import type { AppSettings, KeyRecord } from '../storage/types';
-import type { NostrEvent, ProfileMetadata } from '../nostr/types';
+import type { ListDescriptor, NostrEvent, ProfileMetadata } from '../nostr/types';
 import { NostrClient } from '../nostr/client';
 import { ThreadService, type ThreadNode } from '../nostr/thread';
 import { PublishService, type PublishInput } from '../nostr/publish';
@@ -9,13 +9,14 @@ import { ZapService } from '../nostr/zaps';
 import type { AssistSource } from '../p2p/types';
 import { NostrCache } from '../nostr/cache';
 import { AuthorService } from '../nostr/author';
-import { MediaRelayListService } from '../nostr/lists';
+import { MediaRelayListService, PeopleListService, RelayListService } from '../nostr/lists';
 import { MediaUploadService } from '../nostr/mediaUpload';
 import { SocialGraph } from '../nostr/social';
 import type { TorrentSnapshot } from '../p2p/registry';
 import { HashtagService } from '../nostr/hashtag';
 import { MediaAttachService, type MediaAttachMode, type MediaAttachResult } from '../p2p/mediaAttach';
 import { AsyncEventVerifier } from '../nostr/eventVerifier';
+import { encodeNeventUri } from '../nostr/uri';
 import { useAuthState } from './state/useAuthState';
 import { useSettingsState } from './state/useSettingsState';
 import { useTransportState } from './state/useTransportState';
@@ -30,6 +31,7 @@ interface AppStateValue {
   events: NostrEvent[];
   profiles: Record<string, ProfileMetadata>;
   followers: string[];
+  following: string[];
   relayList: string[];
   mediaRelayList: string[];
   relayStatus: Record<string, boolean>;
@@ -80,11 +82,25 @@ interface AppStateValue {
   toggleBlock: (pubkey: string) => void;
   toggleNsfwAuthor: (pubkey: string) => void;
   setFeedMode: (mode: AppSettings['feedMode']) => void;
+  publishRelayList: (urls: string[]) => Promise<void>;
   saveMediaRelays: (urls: string[]) => Promise<void>;
   uploadMedia: (file: File, relays: string[], onProgress?: (percent: number) => void, preferredRelay?: string) => Promise<{ url: string; sha256?: string }>;
   authorService: AuthorService;
   hashtagService: HashtagService;
   findEventById: (id: string) => NostrEvent | undefined;
+  fetchEventById: (id: string) => Promise<NostrEvent | undefined>;
+  publishRepost: (event: NostrEvent) => Promise<void>;
+  publishReaction: (event: NostrEvent, reaction?: string) => Promise<void>;
+  shareEvent: (event: NostrEvent) => Promise<string>;
+  publishProfile: (profile: ProfileMetadata) => Promise<void>;
+  fetchFollowersFor: (pubkey: string) => Promise<string[]>;
+  fetchFollowingFor: (pubkey: string) => Promise<string[]>;
+  searchProfiles: (query: string) => Promise<Record<string, ProfileMetadata>>;
+  searchEvents: (query: string) => Promise<NostrEvent[]>;
+  fetchMentions: (pubkey: string, input?: { until?: number; limit?: number }) => Promise<NostrEvent[]>;
+  subscribeMentions: (pubkey: string, onEvent: (event: NostrEvent) => void, onClose?: (reasons: string[]) => void) => Promise<() => void>;
+  fetchLists: (pubkey: string) => Promise<ListDescriptor[]>;
+  publishPeopleList: (input: { title: string; description?: string; pubkeys: string[]; kind?: number }) => Promise<void>;
   saveP2PSettings: (settings: AppSettings['p2p'], updatedAt: number) => Promise<void>;
 }
 
@@ -154,6 +170,8 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   const publishService = useMemo(() => new PublishService(nostr, signer), [nostr, signer]);
   const zapService = useMemo(() => new ZapService(signer), [signer]);
   const mediaRelayService = useMemo(() => new MediaRelayListService(nostr, signer), [nostr, signer]);
+  const relayListService = useMemo(() => new RelayListService(nostr, signer), [nostr, signer]);
+  const peopleListService = useMemo(() => new PeopleListService(nostr, signer), [nostr, signer]);
   const mediaUploadService = useMemo(() => new MediaUploadService(signer), [signer]);
 
   useEffect(() => {
@@ -241,8 +259,8 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   }, [settings, updateSettings]);
 
   const setFeedMode = useCallback((mode: AppSettings['feedMode']) => {
-    updateSettings({ ...settings, feedMode: mode });
-  }, [settings, updateSettings]);
+    updateSettings({ ...settingsRef.current, feedMode: mode });
+  }, [updateSettings]);
 
   const publishWithAssist = useCallback(async (input: PublishInput) => {
     const media = input.media ?? [];
@@ -299,6 +317,15 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     }
   }, [mediaRelayService, keys?.npub, settings, updateSettings]);
 
+  const publishRelayList = useCallback(async (urls: string[]) => {
+    if (!keys?.npub) return;
+    try {
+      await relayListService.publish(urls);
+    } catch {
+      // ignore publish errors; local settings still updated
+    }
+  }, [keys?.npub, relayListService]);
+
   const uploadMedia = useCallback(async (file: File, relays: string[], onProgress?: (percent: number) => void, preferredRelay?: string) => {
     if (!keys?.npub) throw new Error('Sign in to upload media');
     return mediaUploadService.uploadWithFallback(file, relays, onProgress, preferredRelay);
@@ -332,6 +359,97 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     });
   }, [publishWithAssist]);
 
+  const publishRepost = useCallback(async (event: NostrEvent) => {
+    const signed = await signer.signEvent({
+      kind: 6,
+      created_at: Math.floor(Date.now() / 1000),
+      tags: [['e', event.id], ['p', event.pubkey]],
+      content: JSON.stringify(event)
+    });
+    await nostr.publishEvent(signed);
+  }, [nostr, signer]);
+
+  const publishReaction = useCallback(async (event: NostrEvent, reaction = '+') => {
+    const rootId = event.tags.find((tag) => tag[0] === 'e' && tag[3] === 'root')?.[1];
+    const tags: string[][] = [['e', event.id], ['p', event.pubkey]];
+    if (rootId && rootId !== event.id) tags.push(['e', rootId, '', 'root']);
+    const signed = await signer.signEvent({
+      kind: 7,
+      created_at: Math.floor(Date.now() / 1000),
+      tags,
+      content: reaction
+    });
+    await nostr.publishEvent(signed);
+  }, [nostr, signer]);
+
+  const shareEvent = useCallback(async (event: NostrEvent) => {
+    const uri = encodeNeventUri({
+      id: event.id,
+      author: event.pubkey,
+      relays: settings.relays.slice(0, 3)
+    });
+    await copyToClipboard(uri);
+    if (navigator.share) {
+      try {
+        await navigator.share({ url: uri, text: uri });
+      } catch {
+        // clipboard already populated
+      }
+    }
+    return uri;
+  }, [settings.relays]);
+
+  const publishProfile = useCallback(async (profile: ProfileMetadata) => {
+    if (!keys?.npub) throw new Error('Sign in to edit profile');
+    const signed = await signer.signEvent({
+      kind: 0,
+      created_at: Math.floor(Date.now() / 1000),
+      tags: [],
+      content: JSON.stringify(profile)
+    });
+    await nostr.publishEvent(signed);
+    setSelfProfile(profile);
+    feedState.setProfiles((prev) => ({ ...prev, [keys.npub]: profile }));
+    await nostrCache.setProfile(keys.npub, profile);
+  }, [feedState, keys, nostr, nostrCache, signer]);
+
+  const fetchFollowersFor = useCallback(async (pubkey: string) => {
+    return nostr.fetchFollowers(pubkey, 600);
+  }, [nostr]);
+
+  const fetchFollowingFor = useCallback(async (pubkey: string) => {
+    return nostr.fetchFollowing(pubkey);
+  }, [nostr]);
+
+  const searchProfiles = useCallback(async (query: string) => {
+    return nostr.searchProfiles(query);
+  }, [nostr]);
+
+  const searchEvents = useCallback(async (query: string) => {
+    return nostr.searchEvents(query);
+  }, [nostr]);
+
+  const fetchMentions = useCallback(async (pubkey: string, input?: { until?: number; limit?: number }) => {
+    return nostr.fetchMentions(pubkey, input);
+  }, [nostr]);
+
+  const subscribeMentions = useCallback(async (
+    pubkey: string,
+    onEvent: (event: NostrEvent) => void,
+    onClose?: (reasons: string[]) => void
+  ) => {
+    return nostr.subscribeMentions(pubkey, onEvent, onClose);
+  }, [nostr]);
+
+  const fetchLists = useCallback(async (pubkey: string) => {
+    return nostr.fetchLists(pubkey);
+  }, [nostr]);
+
+  const publishPeopleList = useCallback(async (input: { title: string; description?: string; pubkeys: string[]; kind?: number }) => {
+    if (!keys?.npub) throw new Error('Sign in to publish a list');
+    await peopleListService.publish(input);
+  }, [keys?.npub, peopleListService]);
+
   const saveP2PSettings = useCallback(async (next: AppSettings['p2p'], updatedAt: number) => {
     if (!keys?.npub) return;
     await publishP2PSettings(next, updatedAt);
@@ -354,6 +472,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   }, [zapService, settings.relays, settings.wallet?.nwc]);
 
   const findEventById = feedState.findEventById;
+  const fetchEventById = useCallback(async (id: string) => nostr.fetchEventById(id), [nostr]);
 
   const feedControlValue = useMemo(
     () => ({ setPaused: feedState.setPaused }),
@@ -368,6 +487,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
         events: feedState.events,
         profiles: feedState.profiles,
         followers,
+        following: settings.follows,
         relayList,
         mediaRelayList,
         relayStatus,
@@ -408,11 +528,25 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
         toggleBlock,
         toggleNsfwAuthor,
         setFeedMode,
+        publishRelayList,
         saveMediaRelays,
         uploadMedia,
         authorService,
         hashtagService,
         findEventById,
+        fetchEventById,
+        publishRepost,
+        publishReaction,
+        shareEvent,
+        publishProfile,
+        fetchFollowersFor,
+        fetchFollowingFor,
+        searchProfiles,
+        searchEvents,
+        fetchMentions,
+        subscribeMentions,
+        fetchLists,
+        publishPeopleList,
         saveP2PSettings
         }}
       >
@@ -420,6 +554,21 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
       </AppState.Provider>
     </FeedControlState.Provider>
   );
+}
+
+async function copyToClipboard(value: string): Promise<void> {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(value);
+    return;
+  }
+  const area = document.createElement('textarea');
+  area.value = value;
+  area.style.position = 'fixed';
+  area.style.opacity = '0';
+  document.body.appendChild(area);
+  area.select();
+  document.execCommand('copy');
+  document.body.removeChild(area);
 }
 
 export function useAppState() {

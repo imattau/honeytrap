@@ -2,6 +2,7 @@ import type { Torrent } from 'webtorrent';
 import type { NostrEvent } from '../nostr/types';
 import { canonicaliseEvent } from './canonical';
 import { sha256Hex } from './verify';
+import { fetchWithTimeout } from './fetchTimeout';
 import type { P2PSettings } from '../storage/types';
 import type { TorrentRegistry } from './registry';
 import type { WebTorrentHub } from './webtorrentHub';
@@ -100,28 +101,4 @@ function fileNameFromUrl(url: string): string {
   } catch {
     return 'media.bin';
   }
-}
-
-async function fetchWithTimeout(url: string, timeoutMs: number): Promise<Response> {
-  const safeTimeoutMs = Math.max(1, timeoutMs);
-  const timeoutSignal = getTimeoutSignal(safeTimeoutMs);
-  try {
-    return await fetch(url, { signal: timeoutSignal.signal });
-  } finally {
-    timeoutSignal.cleanup();
-  }
-}
-
-function getTimeoutSignal(timeoutMs: number): { signal: AbortSignal; cleanup: () => void } {
-  if (typeof AbortSignal.timeout === 'function') {
-    return { signal: AbortSignal.timeout(timeoutMs), cleanup: () => undefined };
-  }
-  const controller = new AbortController();
-  const timer = globalThis.setTimeout(() => {
-    controller.abort();
-  }, timeoutMs);
-  return {
-    signal: controller.signal,
-    cleanup: () => globalThis.clearTimeout(timer)
-  };
 }

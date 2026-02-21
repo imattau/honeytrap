@@ -1,7 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { flushSync } from 'react-dom';
 import { Virtuoso } from 'react-virtuoso';
 import { X } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { openThread } from './threadNavigation';
 import type { ThreadNode } from '../nostr/thread';
 import type { NostrEvent, ProfileMetadata } from '../nostr/types';
 import { useAppState } from './AppState';
@@ -85,11 +87,12 @@ export function ThreadStack() {
   };
 
   const closeThread = () => {
-    navigate(-1);
-    globalThis.setTimeout(() => {
-      if (!globalThis.location.pathname.startsWith('/thread/')) return;
-      navigate('/', { replace: true });
-    }, 0);
+    const idx = (window.history.state as { idx?: number } | null)?.idx ?? 0;
+    if (idx > 0) {
+      flushSync(() => navigate(-1));
+    } else {
+      flushSync(() => navigate('/', { replace: true }));
+    }
   };
 
   const handleReply = (event: NostrEvent) => {
@@ -133,7 +136,7 @@ export function ThreadStack() {
             <PostCard
               event={node.event}
               profile={profiles[node.event.pubkey]}
-              onSelect={(event) => selectEvent(event)}
+              onOpenThread={() => openThread(navigate, node.event)}
               depth={node.depth}
               variant={node.role}
               showActions

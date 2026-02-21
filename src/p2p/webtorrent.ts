@@ -1,5 +1,6 @@
 import type { Torrent } from 'webtorrent';
 import { verifySha256 } from './verify';
+import { fetchWithTimeout, isAbortError } from './fetchTimeout';
 import type { AssistResult, AssistSource } from './types';
 import type { TorrentRegistry } from './registry';
 import type { WebTorrentHub } from './webtorrentHub';
@@ -37,7 +38,15 @@ export class WebTorrentAssist {
       }
     }
     if (!isHttp) throw new Error('No HTTP fallback available');
-    const response = await fetchWithTimeout(source.url, timeoutMs);
+    let response: Response;
+    try {
+      response = await fetchWithTimeout(source.url, timeoutMs);
+    } catch (error) {
+      if (isAbortError(error)) {
+        throw new Error('HTTP assist timed out');
+      }
+      throw error;
+    }
     if (!response.ok) {
       throw new Error(`HTTP assist failed with status ${response.status}`);
     }
@@ -103,16 +112,25 @@ export class WebTorrentAssist {
     if (!this.hub?.getClient()) return Promise.resolve(undefined);
     return new Promise((resolve) => {
       let timedOut = false;
-      const timer = setTimeout(() => {
+      let settled = false;
+      let trackedTorrent: Torrent | undefined;
+      const settle = (value: { torrent: Torrent } | undefined) => {
+        if (settled) return;
+        settled = true;
+        resolve(value);
+      };
+      const timer = globalThis.setTimeout(() => {
         timedOut = true;
+        trackedTorrent?.destroy();
         this.registry?.finish(magnet);
-        resolve(undefined);
+        settle(undefined);
       }, timeoutMs);
 
       const urlList = source.type === 'media' && source.url.startsWith('http')
         ? [source.url]
         : undefined;
       this.hub!.ensure(magnet, (torrent: Torrent) => {
+        trackedTorrent = torrent;
         if (timedOut) {
           torrent.destroy();
           return;
@@ -132,8 +150,8 @@ export class WebTorrentAssist {
             torrent.destroy();
             return;
           }
-          clearTimeout(timer);
-          resolve({ torrent });
+          globalThis.clearTimeout(timer);
+          settle({ torrent });
         };
         if (torrent.ready) onReady();
         else torrent.once('ready', onReady);
@@ -161,42 +179,4 @@ export class WebTorrentAssist {
     torrent.on('error', () => this.registry?.finish(magnet));
     torrent.on('close', () => this.registry?.finish(magnet));
   }
-}
-
-async function fetchWithTimeout(url: string, timeoutMs: number): Promise<Response> {
-  const safeTimeoutMs = Math.max(1, timeoutMs);
-  const timeoutSignal = getTimeoutSignal(safeTimeoutMs);
-  try {
-    return await fetch(url, { signal: timeoutSignal.signal });
-  } catch (error) {
-    if (isAbortError(error)) {
-      throw new Error('HTTP assist timed out');
-    }
-    throw error;
-  } finally {
-    timeoutSignal.cleanup();
-  }
-}
-
-function isAbortError(error: unknown): boolean {
-  return Boolean(
-    error
-    && typeof error === 'object'
-    && 'name' in error
-    && (error as { name?: unknown }).name === 'AbortError'
-  );
-}
-
-function getTimeoutSignal(timeoutMs: number): { signal: AbortSignal; cleanup: () => void } {
-  if (typeof AbortSignal.timeout === 'function') {
-    return { signal: AbortSignal.timeout(timeoutMs), cleanup: () => undefined };
-  }
-  const controller = new AbortController();
-  const timer = globalThis.setTimeout(() => {
-    controller.abort();
-  }, timeoutMs);
-  return {
-    signal: controller.signal,
-    cleanup: () => globalThis.clearTimeout(timer)
-  };
 }

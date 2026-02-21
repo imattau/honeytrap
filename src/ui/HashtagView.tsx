@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
 import { Virtuoso } from 'react-virtuoso';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Hash } from 'lucide-react';
@@ -55,7 +56,10 @@ export function HashtagView() {
     <div className="author-view">
       <div className={`progress-line ${loading ? 'active' : ''}`} aria-hidden="true" />
       <div className="author-header">
-        <button className="author-back" onClick={() => navigate(-1)} aria-label="Back">
+        <button className="author-back" onClick={() => {
+          const idx = (window.history.state as { idx?: number } | null)?.idx ?? 0;
+          if (idx > 0) { flushSync(() => navigate(-1)); } else { flushSync(() => navigate('/')); }
+        }} aria-label="Back">
           <ArrowLeft size={18} />
         </button>
         <div className="author-card">
