@@ -101,11 +101,45 @@ export function useP2PState({
     torrentSync.hydrate(keysNpub, (snapshot) => {
       if (!active) return;
       torrentRegistry.setAll(Object.values(snapshot));
+      if (!settingsRef.current.p2p.enabled) return;
+      const now = Date.now();
+      Object.values(snapshot).forEach((item) => {
+        if (item.availableUntil && now > item.availableUntil) return;
+        if (item.mode === 'seed') {
+          webtorrentHub.ensure(item.magnet, (torrent) => {
+            torrentRegistry.update(item.magnet, { name: torrent.name });
+            const update = () => torrentRegistry.update(item.magnet, {
+              peers: torrent.numPeers,
+              progress: torrent.progress,
+              downloaded: torrent.downloaded,
+              uploaded: torrent.uploaded
+            });
+            torrent.on('download', update);
+            torrent.on('upload', update);
+            torrent.on('wire', update);
+            torrent.on('noPeers', update);
+            torrent.on('done', update);
+            torrent.on('error', () => torrentRegistry.finish(item.magnet));
+            torrent.on('close', () => torrentRegistry.finish(item.magnet));
+          });
+        } else if (item.url?.startsWith('http')) {
+          const source: AssistSource = {
+            url: item.url,
+            magnet: item.magnet,
+            sha256: undefined,
+            type: 'media',
+            eventId: item.eventId,
+            authorPubkey: item.authorPubkey,
+            availableUntil: item.availableUntil
+          };
+          mediaAssist.ensureWebSeed(source, true);
+        }
+      });
     }).catch(() => null);
     return () => {
       active = false;
     };
-  }, [keysNpub, torrentSync, torrentRegistry]);
+  }, [keysNpub, torrentSync, torrentRegistry, webtorrentHub, mediaAssist]);
 
   useEffect(() => {
     if (!keysNpub) return;
@@ -232,6 +266,16 @@ export function useP2PState({
     });
   }, [torrentRegistry, webtorrentHub]);
 
+  const seedEvent = useCallback(async (event: NostrEvent) => {
+    if (!settingsRef.current.p2p.enabled) return;
+    try {
+      const result = await magnetBuilder.buildEventPackage(event);
+      if (!result.magnet) return;
+    } catch {
+      // Fire-and-forget; seeding failure is non-fatal
+    }
+  }, [magnetBuilder]);
+
   const assistEvent = useCallback(async (event: NostrEvent) => {
     const authorPubkey = event.pubkey;
     const currentKeys = keysRef.current;
@@ -252,6 +296,7 @@ export function useP2PState({
     magnetBuilder,
     loadMedia,
     seedMediaFile,
+    seedEvent,
     reseedTorrent,
     assistEvent,
     loadP2PSettings: (pubkey: string) => settingsListService.load(pubkey),

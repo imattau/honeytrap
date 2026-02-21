@@ -72,6 +72,7 @@ interface AppStateValue {
     timeoutMs?: number;
   }) => Promise<{ url: string; source: 'p2p' | 'http' }>;
   seedMediaFile: (file: File) => Promise<{ url: string; magnet: string; sha256: string }>;
+  seedEvent: (event: NostrEvent) => Promise<void>;
   reseedTorrent: (magnet: string) => void;
   attachMedia: (files: File[], mode: MediaAttachMode, options: { relays: string[]; preferredRelay?: string; onProgress?: (percent: number) => void }) => Promise<MediaAttachResult[]>;
   flushPending: () => void;
@@ -135,7 +136,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     updateSettings
   });
 
-  const { torrentSnapshot, canEncryptNip44, magnetBuilder, loadMedia, seedMediaFile, reseedTorrent, assistEvent, loadP2PSettings, publishP2PSettings } = useP2PState({
+  const { torrentSnapshot, canEncryptNip44, magnetBuilder, loadMedia, seedMediaFile, seedEvent, reseedTorrent, assistEvent, loadP2PSettings, publishP2PSettings } = useP2PState({
     settings,
     nostr,
     signer,
@@ -312,8 +313,9 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     if (seeded) {
       transportStore.mark(finalSigned.id, { p2p: true });
     }
+    seedEvent(finalSigned).catch(() => null);
     return finalSigned;
-  }, [magnetBuilder, publishService, settings.p2p.enabled, transportStore]);
+  }, [magnetBuilder, publishService, seedEvent, settings.p2p.enabled, transportStore]);
 
   const saveMediaRelays = useCallback(async (urls: string[]) => {
     updateSettings({ ...settings, mediaRelays: urls });
@@ -568,6 +570,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
         canEncryptNip44,
         loadMedia,
         seedMediaFile,
+        seedEvent,
         reseedTorrent,
         attachMedia,
         flushPending: feedState.flushPending,
