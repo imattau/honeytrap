@@ -176,6 +176,14 @@ export function Drawer() {
     disconnectNip46();
     await clearKeys();
   };
+  const handleMobileProfile = () => {
+    if (!keys?.npub) {
+      setOpen(true);
+      return;
+    }
+    flushSync(() => navigate(`/author/${keys.npub}`));
+    setOpen(false);
+  };
 
   const handleSaveRelays = () => {
     const next = menuState.applyRelays(settings);
@@ -204,16 +212,40 @@ export function Drawer() {
     setSavedSection('wallet');
   };
 
+  const mobileProfileName = isAuthed
+    ? (selfProfile?.display_name ?? selfProfile?.name ?? `${keys?.npub?.slice(0, 12)}…`)
+    : 'Open profile';
+
   return (
     <>
       {!isWide && (
-        <button className="top-handle" onClick={() => setOpen((prev) => !prev)}>
-          <span className="top-handle-pill" />
-          <span className="top-handle-label">Menu</span>
-        </button>
+        <div className="mobile-header-bar">
+          <button
+            className="mobile-header-menu"
+            onClick={() => setOpen((prev) => !prev)}
+            aria-controls="honeytrap-drawer-panel"
+            aria-expanded={open}
+          >
+            <span className="mobile-header-menu-pill" />
+            <span className="mobile-header-menu-label">{open ? 'Close menu' : 'Menu'}</span>
+          </button>
+          <button
+            className={`mobile-profile-chip ${isAuthed ? '' : 'guest'}`}
+            onClick={handleMobileProfile}
+            aria-label={isAuthed ? 'Open your profile' : 'Open menu to sign in'}
+          >
+            {selfProfile?.picture ? (
+              <img src={selfProfile.picture} alt="avatar" className="mobile-profile-avatar" />
+            ) : (
+              <img src={fallbackAvatar} alt="avatar" className="mobile-profile-avatar fallback" />
+            )}
+            <span className="mobile-profile-name">{mobileProfileName}</span>
+          </button>
+        </div>
       )}
       {open && !isWide && <div className="drawer-backdrop" onClick={() => setOpen(false)} />}
       <div
+        id="honeytrap-drawer-panel"
         className={`top-drawer ${open ? 'open' : ''}`}
         onTouchStart={(event) => {
           if (isWide) return;

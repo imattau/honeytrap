@@ -5,6 +5,8 @@ import { nip04 } from 'nostr-tools';
 import { nip44 } from 'nostr-tools';
 import type { NostrEvent } from './types';
 import { normalizeRelayUrl } from './relayUrl';
+import { z } from 'zod';
+import { parseJsonString } from './validation';
 
 export type NwcEncryption = 'nip04' | 'nip44_v2';
 
@@ -13,6 +15,16 @@ export interface NwcConnection {
   relays: string[];
   secret: string;
 }
+
+const walletResponseSchema = z.object({
+  result: z.unknown().optional(),
+  error: z.union([
+    z.string(),
+    z.object({
+      message: z.string().optional()
+    }).passthrough()
+  ]).optional()
+}).passthrough();
 
 export class NwcClient {
   private pool = new SimplePool();
@@ -114,9 +126,16 @@ export class NwcClient {
         onevent: (event: NostrEvent) => {
           try {
             const decrypted = this.decryptPayload(event.content);
-            const response = JSON.parse(decrypted);
+            const response = parseJsonString(
+              decrypted,
+              walletResponseSchema,
+              'Failed to parse wallet response'
+            );
             if (response.error) {
-              finish(new Error(response.error.message ?? 'Wallet error'));
+              const message = typeof response.error === 'string'
+                ? response.error
+                : response.error.message;
+              finish(new Error(message ?? 'Wallet error'));
               return;
             }
             finish();

@@ -2,6 +2,16 @@ import type { NostrEvent, ProfileMetadata } from './types';
 import type { EventSigner } from './signer';
 import { NwcClient } from './nwc';
 import type { ZapServiceApi } from './contracts';
+import { z } from 'zod';
+import { parseJsonResponse } from './validation';
+
+const lnurlResponseSchema = z.object({
+  callback: z.string().min(1)
+}).passthrough();
+
+const invoiceResponseSchema = z.object({
+  pr: z.string().min(1)
+}).passthrough();
 
 export interface ZapRequestInput {
   targetEvent: NostrEvent;
@@ -27,8 +37,11 @@ export async function requestZapInvoice({
   const lnurl = lud06 ?? (lud16 ? lnurlFromLud16(lud16) : undefined);
   if (!lnurl) throw new Error('No LNURL available for recipient');
 
-  const lnurlResponse = await fetch(lnurl).then((res) => res.json());
-  if (!lnurlResponse.callback) throw new Error('LNURL callback missing');
+  const lnurlResponse = await parseJsonResponse(
+    await fetch(lnurl),
+    lnurlResponseSchema,
+    'LNURL callback missing'
+  );
 
   const zapRequest = await signer.signEvent({
     kind: 9734,
@@ -46,9 +59,12 @@ export async function requestZapInvoice({
     nostr: JSON.stringify(zapRequest)
   });
   const callbackUrl = `${lnurlResponse.callback}?${params.toString()}`;
-  const invoiceResponse = await fetch(callbackUrl).then((res) => res.json());
-  if (!invoiceResponse.pr) throw new Error('Invoice missing');
-  return invoiceResponse.pr as string;
+  const invoiceResponse = await parseJsonResponse(
+    await fetch(callbackUrl),
+    invoiceResponseSchema,
+    'Invoice missing'
+  );
+  return invoiceResponse.pr;
 }
 
 function lnurlFromLud16(lud16: string): string {

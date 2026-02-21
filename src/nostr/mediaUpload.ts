@@ -2,11 +2,25 @@ import type { EventSigner } from './signer';
 import { sha256Hex } from '../p2p/verify';
 import { hexToBytes } from 'nostr-tools/utils';
 import { base64 } from '@scure/base';
+import { z } from 'zod';
+import { parseJsonResponse, parseJsonString } from './validation';
 
 export interface UploadResult {
   url: string;
   sha256?: string;
 }
+
+const nip96Schema = z.object({
+  api_url: z.string().min(1).optional(),
+  delegated_to_url: z.string().min(1).optional()
+}).passthrough();
+
+const uploadResponseSchema = z.object({
+  status: z.string().optional(),
+  nip94_event: z.object({
+    tags: z.array(z.array(z.string())).optional()
+  }).optional()
+}).passthrough();
 
 export class MediaUploadService {
   constructor(private signer: EventSigner) {}
@@ -50,10 +64,7 @@ export class MediaUploadService {
       xhr.send(form);
     });
 
-    const data = JSON.parse(responseText) as {
-      status?: string;
-      nip94_event?: { tags?: string[][] };
-    };
+    const data = parseJsonString(responseText, uploadResponseSchema, 'Upload response malformed');
     const tags = data.nip94_event?.tags ?? [];
     const url = tags.find((tag) => tag[0] === 'url')?.[1];
     const ox = tags.find((tag) => tag[0] === 'ox')?.[1];
@@ -88,7 +99,7 @@ export class MediaUploadService {
     try {
       const response = await fetch(wellKnown);
       if (response.ok) {
-        const data = await response.json() as { api_url?: string; delegated_to_url?: string };
+        const data = await parseJsonResponse(response, nip96Schema, 'Invalid NIP-96 response');
         if (data.delegated_to_url) {
           return this.resolveApiUrl(data.delegated_to_url);
         }

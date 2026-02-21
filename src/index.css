@@ -42,6 +42,7 @@ body {
   max-width: 100%;
   color: #e5edf7;
   overflow-x: hidden;
+  padding-top: calc(58px + env(safe-area-inset-top));
 }
 
 .feed-virtuoso {
@@ -467,35 +468,85 @@ body {
   color: #d1dae6;
 }
 
-.top-handle {
+.mobile-header-bar {
   position: fixed;
-  top: 8px;
-  left: 50%;
-  transform: translateX(-50%);
+  top: 0;
+  left: 0;
+  right: 0;
+  height: calc(58px + env(safe-area-inset-top));
+  padding: calc(8px + env(safe-area-inset-top)) 12px 8px;
   z-index: 40;
   display: flex;
-  flex-direction: column;
+  justify-content: space-between;
   align-items: center;
-  gap: 6px;
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  color: #cdd7e4;
+  gap: 10px;
+  background: linear-gradient(180deg, rgba(11, 13, 16, 0.95), rgba(11, 13, 16, 0.88));
+  border-bottom: 1px solid #1b222c;
+  backdrop-filter: blur(12px);
+}
+
+.mobile-header-menu {
+  border: 1px solid #1b222c;
+  border-radius: 999px;
+  background: rgba(8, 12, 18, 0.8);
+  color: #d7e0ed;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
   font-size: 11px;
-  letter-spacing: 0.14em;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
 }
 
-.top-handle-pill {
-  width: 56px;
+.mobile-header-menu-pill {
+  width: 22px;
   height: 6px;
   border-radius: 999px;
-  background: #1b222c;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+  background: rgba(109, 214, 255, 0.65);
 }
 
-.top-handle-label {
-  font-size: 10px;
+.mobile-header-menu-label {
+  line-height: 1;
+}
+
+.mobile-profile-chip {
+  border: 1px solid #1b222c;
+  border-radius: 999px;
+  background: rgba(8, 12, 18, 0.82);
+  color: #d7e0ed;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  max-width: min(58vw, 280px);
+  padding: 6px 10px 6px 6px;
+}
+
+.mobile-profile-chip.guest {
+  border-color: rgba(109, 214, 255, 0.35);
+  color: #b9e6ff;
+}
+
+.mobile-profile-avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  object-fit: cover;
+  background: #1b222c;
+  border: 1px solid #1b222c;
+}
+
+.mobile-profile-avatar.fallback {
+  border-color: rgba(109, 214, 255, 0.25);
+}
+
+.mobile-profile-name {
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .top-drawer {
@@ -568,9 +619,10 @@ body {
 @media (min-width: 1024px) {
   .app-shell {
     padding-left: 320px;
+    padding-top: 0;
   }
 
-  .top-handle {
+  .mobile-header-bar {
     display: none;
   }
 

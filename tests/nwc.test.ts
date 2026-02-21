@@ -62,3 +62,41 @@ describe('NwcClient.payInvoice publish reliability', () => {
     expect(waitForResponse).not.toHaveBeenCalled();
   });
 });
+
+describe('NwcClient wallet response parsing', () => {
+  it('rejects when wallet payload is invalid JSON', async () => {
+    const client = new NwcClient({
+      walletPubkey: 'f'.repeat(64),
+      relays: ['wss://relay.one'],
+      secret: '1'.repeat(64)
+    });
+
+    (client as any).decryptPayload = () => '{not valid';
+    (client as any).pool = {
+      subscribe: (_relays: string[], _filter: any, handlers: { onevent: (event: any) => void }) => {
+        queueMicrotask(() => handlers.onevent({ content: 'cipher' }));
+        return { close: () => undefined };
+      }
+    };
+
+    await expect((client as any).waitForResponse('request-id', 100)).rejects.toThrow('Failed to parse wallet response');
+  });
+
+  it('rejects with wallet error message when response has string error', async () => {
+    const client = new NwcClient({
+      walletPubkey: 'f'.repeat(64),
+      relays: ['wss://relay.one'],
+      secret: '1'.repeat(64)
+    });
+
+    (client as any).decryptPayload = () => JSON.stringify({ error: 'insufficient funds' });
+    (client as any).pool = {
+      subscribe: (_relays: string[], _filter: any, handlers: { onevent: (event: any) => void }) => {
+        queueMicrotask(() => handlers.onevent({ content: 'cipher' }));
+        return { close: () => undefined };
+      }
+    };
+
+    await expect((client as any).waitForResponse('request-id', 100)).rejects.toThrow('insufficient funds');
+  });
+});
