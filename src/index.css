@@ -364,10 +364,19 @@ body {
 .post-media-item {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
   display: block;
   opacity: 0;
   transition: opacity 200ms ease;
+}
+
+.post-media-shell.image .post-media-item {
+  object-fit: contain;
+  background: rgba(8, 12, 18, 0.92);
+}
+
+.post-media-shell.video .post-media-item {
+  object-fit: cover;
 }
 
 .post-media-shell.loaded .post-media-item {
@@ -625,7 +634,7 @@ body {
   color: #6f8099;
 }
 
-@media (min-width: 1024px) {
+@media (min-width: 1200px) {
   .app-shell {
     padding-left: 320px;
     padding-top: 0;

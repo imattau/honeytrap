@@ -191,4 +191,25 @@ describe('NostrClient.fetchProfiles', () => {
       expect.objectContaining({ kinds: [0], authors: [bob], limit: 5 })
     );
   });
+
+  it('refreshes cached profiles from relay metadata when available', async () => {
+    const client = new NostrClient();
+    const alice = 'a'.repeat(64);
+    const setProfile = vi.fn(async () => undefined);
+    (client as any).cache = {
+      getProfile: vi.fn(async () => ({ name: 'Alice Cached', picture: 'https://cdn.example/cached.png' })),
+      setProfile
+    };
+    (client as any).safeQuerySync = vi.fn(async () => [
+      profileEvent(alice, 300, { name: 'Alice Fresh', picture: 'https://cdn.example/fresh.png' })
+    ]);
+
+    const profiles = await client.fetchProfiles([alice]);
+
+    expect((client as any).safeQuerySync).toHaveBeenCalledWith(
+      expect.objectContaining({ kinds: [0], authors: [alice] })
+    );
+    expect(profiles[alice]).toEqual({ name: 'Alice Fresh', picture: 'https://cdn.example/fresh.png' });
+    expect(setProfile).toHaveBeenCalledWith(alice, { name: 'Alice Fresh', picture: 'https://cdn.example/fresh.png' });
+  });
 });

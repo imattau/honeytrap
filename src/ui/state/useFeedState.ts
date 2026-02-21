@@ -91,6 +91,23 @@ export function useFeedState({
     }, 120);
   }, []);
 
+  const mergeProfiles = useCallback((incoming: Record<string, ProfileMetadata>) => {
+    const entries = Object.entries(incoming);
+    if (entries.length === 0) return;
+    setProfiles((prev) => {
+      let changed = false;
+      const next = { ...prev };
+      for (const [pubkey, profile] of entries) {
+        if (!profile) continue;
+        const current = prev[pubkey];
+        if (current && profilesEqual(current, profile)) continue;
+        next[pubkey] = profile;
+        changed = true;
+      }
+      return changed ? next : prev;
+    });
+  }, []);
+
   const subscribeFeed = useCallback(() => {
     timelineCache.reset();
     eventsRef.current = [];
@@ -106,10 +123,10 @@ export function useFeedState({
         timelineCache.set(next);
         if (feedLoadingRef.current) setFeedLoadingSafe(false);
       },
-      setProfiles,
+      mergeProfiles,
       setPendingCountBatched
     );
-  }, [orchestrator, settings.follows, settings.selectedListId, settings.feedMode, followers, setFeedLoadingSafe, setPendingCountBatched, timelineCache]);
+  }, [orchestrator, settings.follows, settings.selectedListId, settings.feedMode, followers, setFeedLoadingSafe, mergeProfiles, setPendingCountBatched, timelineCache]);
 
   useEffect(() => {
     orchestrator.stop();
@@ -149,12 +166,12 @@ export function useFeedState({
   const selectEvent = (event?: NostrEvent) => {
     setSelectedEvent(event);
     if (event) setSelectedAuthor(event.pubkey);
-    if (event) orchestrator.ensureProfile(event.pubkey, setProfiles);
+    if (event) orchestrator.ensureProfile(event.pubkey, mergeProfiles);
   };
 
   const selectAuthor = (pubkey?: string) => {
     setSelectedAuthor(pubkey);
-    if (pubkey) orchestrator.ensureProfile(pubkey, setProfiles);
+    if (pubkey) orchestrator.ensureProfile(pubkey, mergeProfiles);
   };
 
   const applySettings = (next: AppSettings) => {
@@ -182,6 +199,7 @@ export function useFeedState({
     paused,
     setPaused,
     setProfiles,
+    mergeProfiles,
     selectEvent,
     selectAuthor,
     loadOlder,
@@ -190,6 +208,22 @@ export function useFeedState({
     findEventById,
     orchestrator
   };
+}
+
+function profilesEqual(a?: ProfileMetadata, b?: ProfileMetadata) {
+  if (!a && !b) return true;
+  if (!a || !b) return false;
+  return (
+    a.name === b.name &&
+    a.display_name === b.display_name &&
+    a.picture === b.picture &&
+    a.banner === b.banner &&
+    a.about === b.about &&
+    a.website === b.website &&
+    a.nip05 === b.nip05 &&
+    a.lud16 === b.lud16 &&
+    a.lud06 === b.lud06
+  );
 }
 
 function filterByFeedMode(events: NostrEvent[], settings: AppSettings, followers: string[]): NostrEvent[] {

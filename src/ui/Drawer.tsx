@@ -14,6 +14,8 @@ import { MenuPill } from './menu/MenuPill';
 import { useNavigate } from 'react-router-dom';
 import type { AppSettings } from '../storage/types';
 
+const DESKTOP_DRAWER_MEDIA_QUERY = '(min-width: 1200px)';
+
 export function Drawer() {
   const navigate = useNavigate();
   const {
@@ -72,10 +74,10 @@ export function Drawer() {
   }, [savedSection]);
 
   useEffect(() => {
-    const mq = window.matchMedia('(min-width: 1024px)');
+    const mq = window.matchMedia(DESKTOP_DRAWER_MEDIA_QUERY);
     const update = () => {
       setIsWide(mq.matches);
-      if (mq.matches) setOpen(true);
+      setOpen(mq.matches);
     };
     update();
     mq.addEventListener('change', update);

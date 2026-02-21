@@ -95,41 +95,40 @@ export class NostrClient implements NostrClientApi {
 
   async fetchProfiles(pubkeys: string[]): Promise<Record<string, ProfileMetadata>> {
     if (pubkeys.length === 0) return {};
-    // Check in-memory/IDB cache first; only query relay for the misses.
+    // Seed from in-memory/IDB cache, then refresh from relay for consistency.
     const result: Record<string, ProfileMetadata> = {};
-    const missing: string[] = [];
     await Promise.all(
       pubkeys.map(async (pubkey) => {
         const cached = await this.cache?.getProfile(pubkey);
         if (cached) {
           result[pubkey] = cached;
-        } else {
-          missing.push(pubkey);
         }
       })
     );
-    if (missing.length === 0) return result;
     // Some relays can return multiple metadata events per author out-of-order.
     // Over-fetch slightly and deterministically keep the newest valid profile per pubkey.
-    const initialLimit = Math.max(missing.length * 2, missing.length + 8);
-    const events = await this.safeQuerySync({ kinds: [0], authors: missing, limit: initialLimit });
+    const initialLimit = Math.max(pubkeys.length * 2, pubkeys.length + 8);
+    const events = await this.safeQuerySync({ kinds: [0], authors: pubkeys, limit: initialLimit });
     const sorted = (events as NostrEvent[])
       .slice()
       .sort((a, b) => b.created_at - a.created_at || b.id.localeCompare(a.id));
-    const unresolved = new Set(missing);
+    const requested = new Set(pubkeys);
+    const resolved = new Set<string>();
     for (const event of sorted) {
-      if (!unresolved.has(event.pubkey)) continue;
+      if (!requested.has(event.pubkey)) continue;
+      if (resolved.has(event.pubkey)) continue;
       const profile = parseProfileEvent(event);
       if (!profile) continue;
       result[event.pubkey] = profile;
-      unresolved.delete(event.pubkey);
+      resolved.add(event.pubkey);
       await this.cache?.setProfile(event.pubkey, profile);
     }
 
     // Fallback: fetch unresolved pubkeys individually to reduce "missing author" UI gaps.
-    if (unresolved.size > 0) {
+    const unresolved = pubkeys.filter((pubkey) => !result[pubkey]);
+    if (unresolved.length > 0) {
       await Promise.all(
-        Array.from(unresolved).map(async (pubkey) => {
+        unresolved.map(async (pubkey) => {
           const fallback = await this.safeQuerySync({ kinds: [0], authors: [pubkey], limit: 5 });
           const latest = (fallback as NostrEvent[])
             .slice()

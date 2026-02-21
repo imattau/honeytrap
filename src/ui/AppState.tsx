@@ -220,7 +220,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
       setSelfProfile(undefined);
       return;
     }
-    feedState.orchestrator.ensureProfile(keys.npub, feedState.setProfiles);
+    feedState.orchestrator.ensureProfile(keys.npub, feedState.mergeProfiles);
   }, [keys, feedState]);
 
   useEffect(() => {
