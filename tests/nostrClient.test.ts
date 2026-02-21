@@ -212,4 +212,70 @@ describe('NostrClient.fetchProfiles', () => {
     expect(profiles[alice]).toEqual({ name: 'Alice Fresh', picture: 'https://cdn.example/fresh.png' });
     expect(setProfile).toHaveBeenCalledWith(alice, { name: 'Alice Fresh', picture: 'https://cdn.example/fresh.png' });
   });
+
+  it('normalizes requested pubkeys before profile queries', async () => {
+    const client = new NostrClient();
+    const uppercase = 'A'.repeat(64);
+    const lowercase = 'a'.repeat(64);
+    (client as any).cache = {
+      getProfile: vi.fn(async () => undefined),
+      setProfile: vi.fn(async () => undefined)
+    };
+    const safeQuerySync = vi.fn(async () => [profileEvent(lowercase, 120, { name: 'Alice Lower' })]);
+    (client as any).safeQuerySync = safeQuerySync;
+
+    const profiles = await client.fetchProfiles([uppercase]);
+
+    expect(safeQuerySync).toHaveBeenCalledWith(
+      expect.objectContaining({ kinds: [0], authors: [lowercase] })
+    );
+    expect(profiles[lowercase]).toEqual({ name: 'Alice Lower' });
+  });
+
+  it('normalizes common profile aliases from metadata events', async () => {
+    const client = new NostrClient();
+    const alice = 'a'.repeat(64);
+    (client as any).cache = {
+      getProfile: vi.fn(async () => undefined),
+      setProfile: vi.fn(async () => undefined)
+    };
+    (client as any).safeQuerySync = vi.fn(async () => [
+      profileEvent(alice, 130, {
+        displayName: 'Alice Alias',
+        image: 'https://cdn.example/alice.png',
+        bio: '  hello world  '
+      })
+    ]);
+
+    const profiles = await client.fetchProfiles([alice]);
+
+    expect(profiles[alice]).toEqual({
+      display_name: 'Alice Alias',
+      picture: 'https://cdn.example/alice.png',
+      about: 'hello world'
+    });
+  });
+
+  it('ignores malformed profile metadata payloads', async () => {
+    const client = new NostrClient();
+    const alice = 'a'.repeat(64);
+    (client as any).cache = {
+      getProfile: vi.fn(async () => undefined),
+      setProfile: vi.fn(async () => undefined)
+    };
+    const malformed: NostrEvent = {
+      id: `${alice.slice(0, 8)}-140`,
+      pubkey: alice,
+      created_at: 140,
+      kind: 0,
+      tags: [],
+      content: '"not an object"',
+      sig: 'a'.repeat(128)
+    };
+    (client as any).safeQuerySync = vi.fn(async () => [malformed]);
+
+    const profiles = await client.fetchProfiles([alice]);
+
+    expect(profiles[alice]).toBeUndefined();
+  });
 });

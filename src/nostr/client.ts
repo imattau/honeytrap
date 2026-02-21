@@ -3,6 +3,7 @@ import { SimplePool } from 'nostr-tools/pool';
 import { bytesToHex, hexToBytes } from 'nostr-tools/utils';
 import type { Filter } from 'nostr-tools';
 import pLimit from 'p-limit';
+import { z } from 'zod';
 import type { ListDescriptor, NostrEvent, ProfileMetadata, TrackItem } from './types';
 import { getAllTagValues, getTagValue } from './utils';
 import type { NostrClientApi } from './contracts';
@@ -94,11 +95,12 @@ export class NostrClient implements NostrClientApi {
   }
 
   async fetchProfiles(pubkeys: string[]): Promise<Record<string, ProfileMetadata>> {
-    if (pubkeys.length === 0) return {};
+    const requestedPubkeys = Array.from(new Set(pubkeys.map((pubkey) => pubkey.trim().toLowerCase()).filter(Boolean)));
+    if (requestedPubkeys.length === 0) return {};
     // Seed from in-memory/IDB cache, then refresh from relay for consistency.
     const result: Record<string, ProfileMetadata> = {};
     await Promise.all(
-      pubkeys.map(async (pubkey) => {
+      requestedPubkeys.map(async (pubkey) => {
         const cached = await this.cache?.getProfile(pubkey);
         if (cached) {
           result[pubkey] = cached;
@@ -107,12 +109,12 @@ export class NostrClient implements NostrClientApi {
     );
     // Some relays can return multiple metadata events per author out-of-order.
     // Over-fetch slightly and deterministically keep the newest valid profile per pubkey.
-    const initialLimit = Math.max(pubkeys.length * 2, pubkeys.length + 8);
-    const events = await this.safeQuerySync({ kinds: [0], authors: pubkeys, limit: initialLimit });
+    const initialLimit = Math.max(requestedPubkeys.length * 2, requestedPubkeys.length + 8);
+    const events = await this.safeQuerySync({ kinds: [0], authors: requestedPubkeys, limit: initialLimit });
     const sorted = (events as NostrEvent[])
       .slice()
       .sort((a, b) => b.created_at - a.created_at || b.id.localeCompare(a.id));
-    const requested = new Set(pubkeys);
+    const requested = new Set(requestedPubkeys);
     const resolved = new Set<string>();
     for (const event of sorted) {
       if (!requested.has(event.pubkey)) continue;
@@ -125,7 +127,7 @@ export class NostrClient implements NostrClientApi {
     }
 
     // Fallback: fetch unresolved pubkeys individually to reduce "missing author" UI gaps.
-    const unresolved = pubkeys.filter((pubkey) => !result[pubkey]);
+    const unresolved = requestedPubkeys.filter((pubkey) => !result[pubkey]);
     if (unresolved.length > 0) {
       await Promise.all(
         unresolved.map(async (pubkey) => {
@@ -448,7 +450,21 @@ function errorMessage(reason: unknown): string {
 
 function parseProfileEvent(event: NostrEvent): ProfileMetadata | undefined {
   try {
-    return JSON.parse(event.content) as ProfileMetadata;
+    const parsed = profileMetadataEventSchema.safeParse(JSON.parse(event.content));
+    if (!parsed.success) return undefined;
+    const profile = parsed.data;
+    const compacted = compactProfile({
+      name: profile.name,
+      display_name: profile.display_name ?? profile.displayName,
+      picture: profile.picture ?? profile.image ?? profile.avatar,
+      banner: profile.banner,
+      about: profile.about ?? profile.bio,
+      website: profile.website,
+      nip05: profile.nip05,
+      lud16: profile.lud16,
+      lud06: profile.lud06
+    });
+    return Object.keys(compacted).length > 0 ? compacted : undefined;
   } catch {
     return undefined;
   }
@@ -460,4 +476,31 @@ function dedupeEventsById(events: NostrEvent[]): NostrEvent[] {
     byId.set(event.id, event);
   });
   return Array.from(byId.values()).sort((a, b) => b.created_at - a.created_at || b.id.localeCompare(a.id));
+}
+
+const profileMetadataEventSchema = z.object({
+  name: z.string().optional(),
+  display_name: z.string().optional(),
+  displayName: z.string().optional(),
+  picture: z.string().optional(),
+  image: z.string().optional(),
+  avatar: z.string().optional(),
+  banner: z.string().optional(),
+  about: z.string().optional(),
+  bio: z.string().optional(),
+  website: z.string().optional(),
+  nip05: z.string().optional(),
+  lud16: z.string().optional(),
+  lud06: z.string().optional()
+}).passthrough();
+
+function compactProfile(profile: ProfileMetadata): ProfileMetadata {
+  const out: ProfileMetadata = {};
+  (Object.entries(profile) as Array<[keyof ProfileMetadata, string | undefined]>).forEach(([key, value]) => {
+    if (typeof value !== 'string') return;
+    const trimmed = value.trim();
+    if (!trimmed) return;
+    out[key] = trimmed;
+  });
+  return out;
 }

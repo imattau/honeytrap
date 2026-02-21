@@ -108,6 +108,7 @@ interface AppStateValue {
 
 const AppState = createContext<AppStateValue | undefined>(undefined);
 const FeedControlState = createContext<{ setPaused: (value: boolean) => void } | undefined>(undefined);
+const PROFILE_HYDRATION_RETRY_MS = 45_000;
 
 export function AppStateProvider({ children }: { children: React.ReactNode }) {
   const nostr = useMemo(() => new NostrClient(), []);
@@ -158,6 +159,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   const [selfProfile, setSelfProfile] = useState<ProfileMetadata | undefined>(undefined);
   const profilesRef = useRef<Record<string, ProfileMetadata>>({});
   const profileHydrationInflightRef = useRef<Set<string>>(new Set());
+  const profileHydrationAttemptRef = useRef<Map<string, number>>(new Map());
 
   const authorService = useMemo(
     () => new AuthorService(nostr, transportStore, isBlockedRef, eventVerifier),
@@ -439,16 +441,24 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   }, [feedState]);
 
   const hydrateProfiles = useCallback(async (pubkeys: string[]) => {
-    const unique = Array.from(new Set(pubkeys.map((pubkey) => pubkey.trim()).filter(Boolean)));
+    const unique = Array.from(new Set(pubkeys.map((pubkey) => pubkey.trim().toLowerCase()).filter(Boolean)));
     if (unique.length === 0) return;
+    const now = Date.now();
     const missing = unique.filter(
-      (pubkey) => !profilesRef.current[pubkey] && !profileHydrationInflightRef.current.has(pubkey)
+      (pubkey) => {
+        if (profilesRef.current[pubkey]) return false;
+        if (profileHydrationInflightRef.current.has(pubkey)) return false;
+        const lastAttempt = profileHydrationAttemptRef.current.get(pubkey) ?? 0;
+        return now - lastAttempt > PROFILE_HYDRATION_RETRY_MS;
+      }
     );
     if (missing.length === 0) return;
     missing.forEach((pubkey) => profileHydrationInflightRef.current.add(pubkey));
+    missing.forEach((pubkey) => profileHydrationAttemptRef.current.set(pubkey, now));
     try {
       const fetched = await nostr.fetchProfiles(missing);
       mergeProfiles(fetched);
+      Object.keys(fetched).forEach((pubkey) => profileHydrationAttemptRef.current.delete(pubkey.toLowerCase()));
     } finally {
       missing.forEach((pubkey) => profileHydrationInflightRef.current.delete(pubkey));
     }

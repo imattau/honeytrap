@@ -58,7 +58,8 @@ export const PostCard = React.memo(function PostCard({
     toggleNsfwAuthor,
     publishRepost,
     publishReaction,
-    shareEvent
+    shareEvent,
+    hydrateProfiles
   } = useAppState();
   const [expanded] = useState(false);
   const [revealed, setRevealed] = useState(false);
@@ -79,6 +80,7 @@ export const PostCard = React.memo(function PostCard({
   const longForm = useMemo(() => (isLongForm ? parseLongFormTags(event.tags) : undefined), [event.tags, isLongForm]);
   const nsfwAuthor = isNsfwAuthor(event.pubkey);
   const isSensitive = useMemo(() => isSensitiveEvent(event) || nsfwAuthor, [event, nsfwAuthor]);
+  const authorProfile = useMemo(() => profile ?? resolveProfile(profiles, event.pubkey), [event.pubkey, profile, profiles]);
   const isExpanded = forceExpanded || expanded;
   const hasMore = showMoreButton && !forceExpanded && (event.content.length > 320 || media.length > 1 || links.length > 1);
   const visibleMedia = isExpanded || !showMoreButton ? media : media.slice(0, 1);
@@ -98,6 +100,11 @@ export const PostCard = React.memo(function PostCard({
     };
   }, []);
 
+  useEffect(() => {
+    if (authorProfile) return;
+    hydrateProfiles([event.pubkey]).catch(() => null);
+  }, [authorProfile, event.pubkey, hydrateProfiles]);
+
   const renderContent = () => {
     const cleaned = stripInvisibleSeparators(stripMediaUrls(event.content, media.map((item) => item.url)));
     const parts = splitNostrContent(cleaned);
@@ -115,7 +122,7 @@ export const PostCard = React.memo(function PostCard({
       if (!decoded) return <span key={`u-${index}`}>{part.value}</span>;
       if (decoded.type === 'npub' || decoded.type === 'nprofile') {
         const pubkey = decoded.pubkey;
-        const profileInfo = profiles[pubkey];
+        const profileInfo = resolveProfile(profiles, pubkey);
         return (
           <button
             key={`p-${index}`}
@@ -250,8 +257,8 @@ export const PostCard = React.memo(function PostCard({
       >
         <header className="post-header">
           <div className="post-author">
-            {profile?.picture ? (
-              <img src={profile.picture} alt="avatar" className="post-avatar" onClick={(e) => { e.stopPropagation(); flushSync(() => navigate(`/author/${event.pubkey}`)); }} />
+            {authorProfile?.picture ? (
+              <img src={authorProfile.picture} alt="avatar" className="post-avatar" onClick={(e) => { e.stopPropagation(); flushSync(() => navigate(`/author/${event.pubkey}`)); }} />
             ) : (
               <img src={fallbackAvatar} alt="avatar" className="post-avatar fallback" onClick={(e) => { e.stopPropagation(); flushSync(() => navigate(`/author/${event.pubkey}`)); }} />
             )}
@@ -264,7 +271,7 @@ export const PostCard = React.memo(function PostCard({
                   flushSync(() => navigate(`/author/${event.pubkey}`));
                 }}
               >
-                {profile?.display_name ?? profile?.name ?? event.pubkey.slice(0, 12)}
+                {authorProfile?.display_name ?? authorProfile?.name ?? event.pubkey.slice(0, 12)}
               </div>
               <div className="post-time">{new Date(event.created_at * 1000).toLocaleString()}</div>
             </div>
@@ -490,6 +497,10 @@ function renderLineWithHashtags(line: string, onTagClick: (tag: string) => void,
     );
   });
   return parts;
+}
+
+function resolveProfile(profiles: Record<string, ProfileMetadata>, pubkey: string): ProfileMetadata | undefined {
+  return profiles[pubkey] ?? profiles[pubkey.toLowerCase()] ?? profiles[pubkey.toUpperCase()];
 }
 
 function stripMediaUrls(content: string, mediaUrls: string[]) {
