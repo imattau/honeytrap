@@ -11,6 +11,8 @@ export interface ThreadNode {
 }
 
 export class ThreadService implements ThreadServiceApi {
+  private readonly maxReplyFetchDepth = 4;
+  private readonly maxReplyNodes = 300;
   private verifier: EventVerifier;
 
   constructor(
@@ -30,7 +32,7 @@ export class ThreadService implements ThreadServiceApi {
 
     const [ancestors, replies] = await Promise.all([
       this.loadAncestors(target),
-      this.client.fetchReplies(target.id).then((r) => r.filter((reply) => !this.isBlocked?.(reply.pubkey)))
+      this.loadRepliesTree(target.id)
     ]);
     replies.forEach((reply) => {
       this.markTransport(reply);
@@ -84,6 +86,31 @@ export class ThreadService implements ThreadServiceApi {
       current = parent;
     }
     return chain;
+  }
+
+  private async loadRepliesTree(targetId: string): Promise<NostrEvent[]> {
+    const repliesById = new Map<string, NostrEvent>();
+    let frontier = [targetId];
+    let depth = 0;
+    while (frontier.length > 0 && depth < this.maxReplyFetchDepth && repliesById.size < this.maxReplyNodes) {
+      const batches = await Promise.all(
+        frontier.map((eventId) => this.client.fetchReplies(eventId).catch(() => [] as NostrEvent[]))
+      );
+      const nextFrontier: string[] = [];
+      for (const batch of batches) {
+        for (const reply of batch) {
+          if (reply.id === targetId) continue;
+          if (this.isBlocked?.(reply.pubkey)) continue;
+          if (repliesById.has(reply.id)) continue;
+          repliesById.set(reply.id, reply);
+          if (nextFrontier.length < this.maxReplyNodes) nextFrontier.push(reply.id);
+        }
+      }
+      frontier = nextFrontier.slice(0, 80);
+      depth += 1;
+    }
+    return Array.from(repliesById.values())
+      .sort((a, b) => a.created_at - b.created_at || a.id.localeCompare(b.id));
   }
 
   private markTransport(event: NostrEvent) {

@@ -140,12 +140,15 @@ export class NostrClient implements NostrClientApi {
 
   async fetchReplies(eventId: string): Promise<NostrEvent[]> {
     const cached = await this.cache?.getReplies(eventId);
-    if (cached) return cached;
-    const events = await this.safeQuerySync({ kinds: [1], '#e': [eventId], limit: 50 });
-    const list = events as NostrEvent[];
-    await this.cache?.setReplies(eventId, list);
-    await this.cache?.setEvents(list);
-    return list;
+    // Always refresh from relay so thread views don't get stuck on a stale empty cache.
+    const events = await this.safeQuerySync({ kinds: [1], '#e': [eventId], limit: 150 });
+    const fresh = events as NostrEvent[];
+    const merged = dedupeEventsById([...(cached ?? []), ...fresh]);
+    if (merged.length > 0) {
+      await this.cache?.setReplies(eventId, merged);
+      await this.cache?.setEvents(merged);
+    }
+    return merged;
   }
 
   async fetchFollowers(pubkey: string, limit = 200): Promise<string[]> {
@@ -429,4 +432,12 @@ function parseProfileEvent(event: NostrEvent): ProfileMetadata | undefined {
   } catch {
     return undefined;
   }
+}
+
+function dedupeEventsById(events: NostrEvent[]): NostrEvent[] {
+  const byId = new Map<string, NostrEvent>();
+  events.forEach((event) => {
+    byId.set(event.id, event);
+  });
+  return Array.from(byId.values()).sort((a, b) => b.created_at - a.created_at || b.id.localeCompare(a.id));
 }

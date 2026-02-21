@@ -106,3 +106,30 @@ describe('NostrClient.publishEvent', () => {
     await expect(client.publishEvent(baseEvent)).rejects.toThrow('No relays configured for publish');
   });
 });
+
+describe('NostrClient.fetchReplies', () => {
+  it('refreshes replies from relay even when cache has stale empty list', async () => {
+    const client = new NostrClient();
+    const event: NostrEvent = {
+      id: 'reply-1',
+      pubkey: 'f'.repeat(64),
+      created_at: 1_700_000_100,
+      kind: 1,
+      tags: [['e', 'root-id', '', 'reply']],
+      content: 'hello',
+      sig: 'a'.repeat(128)
+    };
+    const getReplies = vi.fn(async () => [] as NostrEvent[]);
+    const setReplies = vi.fn(async () => undefined);
+    const setEvents = vi.fn(async () => undefined);
+    (client as any).cache = { getReplies, setReplies, setEvents };
+    (client as any).safeQuerySync = vi.fn(async () => [event]);
+
+    const replies = await client.fetchReplies('root-id');
+
+    expect(replies.map((item) => item.id)).toEqual(['reply-1']);
+    expect((client as any).safeQuerySync).toHaveBeenCalledWith({ kinds: [1], '#e': ['root-id'], limit: 150 });
+    expect(setReplies).toHaveBeenCalledOnce();
+    expect(setEvents).toHaveBeenCalledOnce();
+  });
+});
