@@ -108,7 +108,7 @@ interface AppStateValue {
 
 const AppState = createContext<AppStateValue | undefined>(undefined);
 const FeedControlState = createContext<{ setPaused: (value: boolean) => void } | undefined>(undefined);
-const PROFILE_HYDRATION_RETRY_MS = 45_000;
+const PROFILE_HYDRATION_RETRY_MS = 8_000;
 
 export function AppStateProvider({ children }: { children: React.ReactNode }) {
   const nostr = useMemo(() => new NostrClient(), []);
@@ -230,9 +230,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     if (next) setSelfProfile(next);
   }, [feedState.profiles, keys]);
 
-  useEffect(() => {
-    profilesRef.current = feedState.profiles;
-  }, [feedState.profiles]);
+  profilesRef.current = feedState.profiles;
 
   useEffect(() => {
     feedState.applySettings(settings);
@@ -423,10 +421,11 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     await nostrCache.setProfile(keys.npub, profile);
   }, [feedState, keys, nostr, nostrCache, signer]);
 
+  const setProfiles = feedState.setProfiles;
   const mergeProfiles = useCallback((incoming: Record<string, ProfileMetadata>) => {
     const entries = Object.entries(incoming);
     if (entries.length === 0) return;
-    feedState.setProfiles((prev) => {
+    setProfiles((prev) => {
       let changed = false;
       const next = { ...prev };
       for (const [pubkey, profile] of entries) {
@@ -438,7 +437,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
       }
       return changed ? next : prev;
     });
-  }, [feedState]);
+  }, [setProfiles]);
 
   const hydrateProfiles = useCallback(async (pubkeys: string[]) => {
     const unique = Array.from(new Set(pubkeys.map((pubkey) => pubkey.trim().toLowerCase()).filter(Boolean)));

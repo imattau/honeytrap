@@ -145,7 +145,9 @@ export class FeedOrchestrator implements FeedOrchestratorApi {
     this.clearLiveFlushTimer();
     const merged = this.flush(getEvents());
     onUpdate(merged);
-    // pending count becomes zero after flush
+    if (this.lastOnProfiles) {
+      this.queueProfilesForEvents(merged, this.lastOnProfiles);
+    }
   }
 
   async loadOlder(
@@ -219,6 +221,16 @@ export class FeedOrchestrator implements FeedOrchestratorApi {
             changed = true;
           }
           if (changed) onProfiles(this.profiles);
+          // Re-queue pubkeys the relay didn't return so they get retried.
+          const missing = toFetch.filter((pk) => !fetched[pk]);
+          if (missing.length > 0) {
+            globalThis.setTimeout(() => {
+              missing.forEach((pk) => {
+                if (!this.profiles[pk]) this.profileQueue.add(pk);
+              });
+              if (this.lastOnProfiles) this.drainProfiles(this.lastOnProfiles);
+            }, 5_000);
+          }
         })
         .catch(() => null)
         .finally(() => {
