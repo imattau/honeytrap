@@ -205,7 +205,6 @@ export function AuthorView() {
               onSelect={selectEvent}
               onOpenThread={() => openThread(navigate, event)}
               showActions
-              actionsPosition="top"
               onReply={() => {
                 setReplyTarget(event);
                 setComposerOpen(true);

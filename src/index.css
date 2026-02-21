@@ -1195,10 +1195,13 @@ body {
 }
 
 .post-actions {
-  display: flex;
-  gap: 10px;
-  justify-content: flex-end;
-  padding-top: 6px;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+  align-items: center;
+  padding-top: 10px;
+  border-top: 1px solid rgba(27, 34, 44, 0.9);
+  background: linear-gradient(180deg, rgba(8, 12, 18, 0), rgba(8, 12, 18, 0.28));
 }
 
 .action-icon {
@@ -1211,6 +1214,7 @@ body {
   display: grid;
   place-items: center;
   transition: 0.2s ease;
+  justify-self: center;
 }
 
 .action-icon:disabled {

@@ -92,7 +92,6 @@ export function NotificationsView() {
               profile={profiles[event.pubkey]}
               onOpenThread={() => openThread(navigate, event)}
               showActions
-              actionsPosition="top"
             />
           </div>
         )}

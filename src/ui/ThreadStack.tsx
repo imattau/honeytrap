@@ -142,7 +142,6 @@ export function ThreadStack() {
               showActions
               showMoreButton={false}
               forceExpanded
-              actionsPosition="top"
               onReply={() => handleReply(node.event)}
               onZap={() => handleZap(node.event)}
             />
