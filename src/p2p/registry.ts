@@ -20,18 +20,20 @@ export interface TorrentStatus {
 export type TorrentSnapshot = Record<string, TorrentStatus>;
 
 export type TorrentListener = (snapshot: TorrentSnapshot) => void;
+const TORRENT_REGISTRY_CHANGE_EVENT = 'torrent:change';
 
 export class TorrentRegistry {
   private items = new Map<string, TorrentStatus>();
-  private listeners = new Set<TorrentListener>();
+  private target = new EventTarget();
 
   constructor(private maxAgeMs = 6 * 60 * 60 * 1000) {}
 
   subscribe(listener: TorrentListener) {
-    this.listeners.add(listener);
+    const handler = () => listener(this.snapshot());
+    this.target.addEventListener(TORRENT_REGISTRY_CHANGE_EVENT, handler);
     listener(this.snapshot());
     return () => {
-      this.listeners.delete(listener);
+      this.target.removeEventListener(TORRENT_REGISTRY_CHANGE_EVENT, handler);
     };
   }
 
@@ -111,7 +113,6 @@ export class TorrentRegistry {
   }
 
   private emit() {
-    const snapshot = this.snapshot();
-    this.listeners.forEach((listener) => listener(snapshot));
+    this.target.dispatchEvent(new Event(TORRENT_REGISTRY_CHANGE_EVENT));
   }
 }

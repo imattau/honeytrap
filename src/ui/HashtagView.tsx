@@ -6,6 +6,7 @@ import type { NostrEvent } from '../nostr/types';
 import { useAppState } from './AppState';
 import { PostCard } from './PostCard';
 import { Composer } from './Composer';
+import { openThread } from './threadNavigation';
 
 export function HashtagView() {
   const { tag } = useParams<{ tag: string }>();
@@ -24,20 +25,29 @@ export function HashtagView() {
   }, [events]);
 
   useEffect(() => {
-    if (!normalized) return;
+    if (!normalized) {
+      eventsRef.current = [];
+      setEvents([]);
+      setLoading(false);
+      return;
+    }
+    eventsRef.current = [];
+    setEvents([]);
+    setLoading(true);
+    let active = true;
     hashtagService.subscribeHashtagFeed(
       normalized,
       () => eventsRef.current,
       (next) => {
+        if (!active) return;
         setEvents(next);
         if (next.length > 0) setLoading(false);
       },
       () => null
     );
     return () => {
+      active = false;
       hashtagService.stop();
-      setEvents([]);
-      setLoading(true);
     };
   }, [hashtagService, normalized]);
 
@@ -61,6 +71,7 @@ export function HashtagView() {
       <Virtuoso
         className="feed-virtuoso"
         data={events}
+        computeItemKey={(_, event) => event.id}
         overscan={600}
         components={{
           EmptyPlaceholder: () => (
@@ -76,7 +87,7 @@ export function HashtagView() {
               event={event}
               profile={profiles[event.pubkey]}
               onSelect={selectEvent}
-              onOpenThread={() => navigate(`/thread/${event.id}`, { state: { event } })}
+              onOpenThread={() => openThread(navigate, event)}
               showActions
               actionsPosition="top"
               onReply={() => {

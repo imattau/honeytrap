@@ -2,12 +2,10 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { WebTorrentAssist } from '../src/p2p/webtorrent';
 import type { AssistSource } from '../src/p2p/types';
 
-const addMock = vi.fn();
 const ensureMock = vi.fn();
 const getClient = vi.fn();
 
 afterEach(() => {
-  addMock.mockReset();
   ensureMock.mockReset();
 });
 
@@ -39,33 +37,45 @@ describe('WebTorrentAssist webseed', () => {
   it('passes webSeed option for media when HTTP url exists', async () => {
     const assist = new WebTorrentAssist(makeSettings(), undefined, {
       getClient,
-      add: addMock
+      ensure: ensureMock
     } as any);
 
-    addMock.mockImplementation((_magnet, _onAdd, opts) => {
-      expect(opts?.webSeeds).toEqual(['https://example.com/media.jpg']);
-      return { files: [], on: () => null };
+    ensureMock.mockImplementation((_magnet, _onAdd, opts) => {
+      expect(opts?.urlList).toEqual(['https://example.com/media.jpg']);
+      return {
+        files: [],
+        ready: true,
+        once: () => null,
+        on: () => null,
+        destroy: () => null
+      };
     });
 
     const source = makeSource();
     await (assist as any).addTorrent(source.magnet!, 1, source);
-    expect(addMock).toHaveBeenCalledTimes(1);
+    expect(ensureMock).toHaveBeenCalledTimes(1);
   });
 
   it('does not pass webSeed for event packages', async () => {
     const assist = new WebTorrentAssist(makeSettings(), undefined, {
       getClient,
-      add: addMock
+      ensure: ensureMock
     } as any);
 
-    addMock.mockImplementation((_magnet, _onAdd, opts) => {
-      expect(opts?.webSeeds).toBeUndefined();
-      return { files: [], on: () => null };
+    ensureMock.mockImplementation((_magnet, _onAdd, opts) => {
+      expect(opts?.urlList).toBeUndefined();
+      return {
+        files: [],
+        ready: true,
+        once: () => null,
+        on: () => null,
+        destroy: () => null
+      };
     });
 
     const source = makeSource({ type: 'event' });
     await (assist as any).addTorrent(source.magnet!, 1, source);
-    expect(addMock).toHaveBeenCalledTimes(1);
+    expect(ensureMock).toHaveBeenCalledTimes(1);
   });
 
   it('reuses webSeed when reseeding via ensure', () => {
@@ -75,7 +85,7 @@ describe('WebTorrentAssist webseed', () => {
     } as any);
 
     ensureMock.mockImplementation((_magnet, _onAdd, opts) => {
-      expect(opts?.webSeeds).toEqual(['https://example.com/media.jpg']);
+      expect(opts?.urlList).toEqual(['https://example.com/media.jpg']);
       return { files: [], on: () => null };
     });
 

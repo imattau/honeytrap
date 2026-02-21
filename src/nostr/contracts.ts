@@ -9,6 +9,7 @@ export interface NostrClientApi {
   setRelays(relays: string[]): void;
   subscribe(filters: Filter[], onEvent: (event: NostrEvent) => void, onClose?: (reasons: string[]) => void): Promise<() => void>;
   fetchProfile(pubkey: string): Promise<ProfileMetadata | undefined>;
+  fetchProfiles(pubkeys: string[]): Promise<Record<string, ProfileMetadata>>;
   fetchLists(pubkey: string): Promise<ListDescriptor[]>;
   fetchReplies(eventId: string): Promise<NostrEvent[]>;
   fetchEventById(id: string): Promise<NostrEvent | undefined>;

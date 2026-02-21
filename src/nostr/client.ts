@@ -2,16 +2,24 @@ import { finalizeEvent, getPublicKey, nip19 } from 'nostr-tools';
 import { SimplePool } from 'nostr-tools/pool';
 import { bytesToHex, hexToBytes } from 'nostr-tools/utils';
 import type { Filter } from 'nostr-tools';
+import pLimit from 'p-limit';
 import type { ListDescriptor, NostrEvent, ProfileMetadata, TrackItem } from './types';
 import { getAllTagValues, getTagValue } from './utils';
 import type { NostrClientApi } from './contracts';
 import type { NostrCache } from './cache';
+
+// Maximum number of concurrent querySync calls (each opens a live REQ on the
+// relay).  Nostr relays typically enforce 10-20 simultaneous subscriptions per
+// connection; the feed subscription itself is always open, so leave generous
+// headroom by capping ad-hoc queries at 4 concurrent REQs.
+const MAX_CONCURRENT_QUERIES = 4;
 
 export class NostrClient implements NostrClientApi {
   private pool = new SimplePool({ enablePing: true, enableReconnect: true });
   private relays: string[] = [];
   private relaySet = new Set<string>();
   private cache?: NostrCache;
+  private queryLimit = pLimit(MAX_CONCURRENT_QUERIES);
 
   setRelays(relays: string[]) {
     const next = Array.from(new Set(relays.map((url) => url.trim()).filter(Boolean)));
@@ -51,18 +59,40 @@ export class NostrClient implements NostrClientApi {
   }
 
   async fetchProfile(pubkey: string): Promise<ProfileMetadata | undefined> {
-    const cached = await this.cache?.getProfile(pubkey);
-    if (cached) return cached;
-    const events = await this.safeQuerySync({ kinds: [0], authors: [pubkey], limit: 1 });
-    const event = events[0] as NostrEvent | undefined;
-    if (!event) return undefined;
-    try {
-      const profile = JSON.parse(event.content) as ProfileMetadata;
-      await this.cache?.setProfile(pubkey, profile);
-      return profile;
-    } catch {
-      return undefined;
-    }
+    const result = await this.fetchProfiles([pubkey]);
+    return result[pubkey];
+  }
+
+  async fetchProfiles(pubkeys: string[]): Promise<Record<string, ProfileMetadata>> {
+    if (pubkeys.length === 0) return {};
+    // Check in-memory/IDB cache first; only query relay for the misses.
+    const result: Record<string, ProfileMetadata> = {};
+    const missing: string[] = [];
+    await Promise.all(
+      pubkeys.map(async (pubkey) => {
+        const cached = await this.cache?.getProfile(pubkey);
+        if (cached) {
+          result[pubkey] = cached;
+        } else {
+          missing.push(pubkey);
+        }
+      })
+    );
+    if (missing.length === 0) return result;
+    // Single relay subscription for all missing pubkeys.
+    const events = await this.safeQuerySync({ kinds: [0], authors: missing, limit: missing.length });
+    await Promise.all(
+      (events as NostrEvent[]).map(async (event) => {
+        try {
+          const profile = JSON.parse(event.content) as ProfileMetadata;
+          result[event.pubkey] = profile;
+          await this.cache?.setProfile(event.pubkey, profile);
+        } catch {
+          // ignore malformed profile
+        }
+      })
+    );
+    return result;
   }
 
   async fetchLists(pubkey: string): Promise<ListDescriptor[]> {
@@ -185,7 +215,7 @@ export class NostrClient implements NostrClientApi {
   }
 
   async publishEvent(event: NostrEvent): Promise<void> {
-    await Promise.allSettled(this.pool.publish(this.relays, event));
+    await this.publishToRelays(event);
   }
 
   async fetchOlderTimeline({
@@ -208,12 +238,14 @@ export class NostrClient implements NostrClientApi {
   }
 
   private async safeQuerySync(filter: Filter): Promise<NostrEvent[]> {
-    try {
-      const events = await this.pool.querySync(this.relays, filter);
-      return events as NostrEvent[];
-    } catch {
-      return [];
-    }
+    return this.queryLimit(async () => {
+      try {
+        const events = await this.pool.querySync(this.relays, filter);
+        return events as NostrEvent[];
+      } catch {
+        return [];
+      }
+    });
   }
 
   async publishList({
@@ -258,8 +290,25 @@ export class NostrClient implements NostrClientApi {
       },
       secretKey
     );
-    await this.pool.publish(this.relays, event);
+    await this.publishToRelays(event as NostrEvent);
     return event as NostrEvent;
+  }
+
+  private async publishToRelays(event: NostrEvent): Promise<void> {
+    if (this.relays.length === 0) {
+      throw new Error('No relays configured for publish');
+    }
+    const results = await Promise.allSettled(this.pool.publish(this.relays, event));
+    const ok = results.some((result) => result.status === 'fulfilled');
+    if (ok) return;
+    const reasons = results
+      .filter((result): result is PromiseRejectedResult => result.status === 'rejected')
+      .map((result) => errorMessage(result.reason))
+      .filter(Boolean);
+    if (reasons.length > 0) {
+      throw new Error(`Failed to publish to relays: ${reasons.join('; ')}`);
+    }
+    throw new Error('Failed to publish to relays');
   }
 
   decodeKey(value: string): { pubkey: string; secretKeyHex?: string } {
@@ -276,4 +325,10 @@ export class NostrClient implements NostrClientApi {
 function toHex(value: Uint8Array | string): string {
   if (typeof value === 'string') return value;
   return bytesToHex(value);
+}
+
+function errorMessage(reason: unknown): string {
+  if (reason instanceof Error && reason.message) return reason.message;
+  if (typeof reason === 'string') return reason;
+  return '';
 }

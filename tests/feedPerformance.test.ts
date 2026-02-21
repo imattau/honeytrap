@@ -15,6 +15,10 @@ class FakeClient {
   async fetchProfile() {
     return undefined;
   }
+
+  async fetchProfiles() {
+    return {};
+  }
 }
 
 function makeEvent(i: number): NostrEvent {

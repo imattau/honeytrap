@@ -1,10 +1,11 @@
 import type { NostrEvent } from './types';
 
 type TimelineListener = () => void;
+const TIMELINE_CHANGE_EVENT = 'change';
 
 export class FeedTimelineCache {
   private events: NostrEvent[] = [];
-  private listeners = new Set<TimelineListener>();
+  private target = new EventTarget();
 
   snapshot(): NostrEvent[] {
     return this.events;
@@ -21,13 +22,14 @@ export class FeedTimelineCache {
   }
 
   subscribe(listener: TimelineListener) {
-    this.listeners.add(listener);
+    const handler = () => listener();
+    this.target.addEventListener(TIMELINE_CHANGE_EVENT, handler);
     return () => {
-      this.listeners.delete(listener);
+      this.target.removeEventListener(TIMELINE_CHANGE_EVENT, handler);
     };
   }
 
   private emit() {
-    this.listeners.forEach((listener) => listener());
+    this.target.dispatchEvent(new Event(TIMELINE_CHANGE_EVENT));
   }
 }

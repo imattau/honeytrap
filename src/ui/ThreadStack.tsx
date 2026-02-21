@@ -1,17 +1,17 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Virtuoso } from 'react-virtuoso';
 import { X } from 'lucide-react';
-import { useLocation, useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import type { ThreadNode } from '../nostr/thread';
 import type { NostrEvent, ProfileMetadata } from '../nostr/types';
 import { useAppState } from './AppState';
 import { PostCard } from './PostCard';
 import { Composer } from './Composer';
 import { ZapComposer } from './ZapComposer';
+import { getThreadPreview } from './threadPreviewCache';
 
 export function ThreadStack() {
   const { id } = useParams<{ id: string }>();
-  const location = useLocation();
   const navigate = useNavigate();
   const {
     profiles,
@@ -24,8 +24,11 @@ export function ThreadStack() {
     mediaRelayList,
     attachMedia
   } = useAppState();
-  const [nodes, setNodes] = useState<ThreadNode[]>([]);
-  const [loading, setLoading] = useState(true);
+  const initialFallback = id ? (getThreadPreview(id) ?? findEventById(id)) : undefined;
+  const [nodes, setNodes] = useState<ThreadNode[]>(
+    () => (initialFallback ? [{ event: initialFallback, depth: 0, role: 'target' }] : [])
+  );
+  const [loading, setLoading] = useState(() => !initialFallback);
   const [touchStart, setTouchStart] = useState<number | null>(null);
   const [composerOpen, setComposerOpen] = useState(false);
   const [replyTarget, setReplyTarget] = useState<NostrEvent | undefined>(undefined);
@@ -34,33 +37,39 @@ export function ThreadStack() {
   const [zapProfile, setZapProfile] = useState<ProfileMetadata | undefined>(undefined);
 
   useEffect(() => {
+    let active = true;
     if (!id) {
       setNodes([]);
       setLoading(false);
       return;
     }
-    setLoading(true);
-    setNodes([]);
-    const stateEvent = (location.state as { event?: NostrEvent } | undefined)?.event;
-    const cached = findEventById(id);
-    const fallback = stateEvent ?? cached;
+    const fallback = getThreadPreview(id) ?? findEventById(id);
     if (fallback) {
       setNodes([{ event: fallback, depth: 0, role: 'target' }]);
       setLoading(false);
+    } else {
+      setNodes([]);
+      setLoading(true);
     }
     loadThread(id)
       .then((loaded) => {
+        if (!active) return;
         if (loaded.length > 0) {
           setNodes(loaded);
+          setLoading(false);
           return;
         }
         setNodes(fallback ? [{ event: fallback, depth: 0, role: 'target' }] : []);
         setLoading(false);
       })
       .catch(() => {
+        if (!active) return;
         setLoading(false);
       });
-  }, [id, loadThread, location.state, findEventById]);
+    return () => {
+      active = false;
+    };
+  }, [id, loadThread, findEventById]);
 
   const isTouch = useMemo(() => window.matchMedia('(pointer: coarse)').matches, []);
 
@@ -71,8 +80,16 @@ export function ThreadStack() {
   const handleTouchEnd: React.TouchEventHandler = (event) => {
     if (touchStart === null) return;
     const endY = event.changedTouches[0]?.clientY ?? touchStart;
-    if (endY - touchStart > 80) navigate('/');
+    if (endY - touchStart > 80) closeThread();
     setTouchStart(null);
+  };
+
+  const closeThread = () => {
+    navigate(-1);
+    globalThis.setTimeout(() => {
+      if (!globalThis.location.pathname.startsWith('/thread/')) return;
+      navigate('/', { replace: true });
+    }, 0);
   };
 
   const handleReply = (event: NostrEvent) => {
@@ -90,7 +107,13 @@ export function ThreadStack() {
     <div className="thread-stack" onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
       <div className={`progress-line ${loading ? 'active' : ''}`} aria-hidden="true" />
       {!isTouch && (
-        <button className="thread-close" onClick={() => navigate('/')}
+        <button
+          type="button"
+          className="thread-close"
+          onClick={(event) => {
+            event.stopPropagation();
+            closeThread();
+          }}
           aria-label="Close thread">
           <X size={18} />
         </button>
@@ -98,6 +121,7 @@ export function ThreadStack() {
       <Virtuoso
         className="thread-virtuoso"
         data={nodes}
+        computeItemKey={(_, node) => node.event.id}
         overscan={600}
         components={{
           EmptyPlaceholder: () => (

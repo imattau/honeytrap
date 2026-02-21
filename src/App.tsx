@@ -9,6 +9,8 @@ import { AuthorView } from './ui/AuthorView';
 import { HashtagView } from './ui/HashtagView';
 import { FabButton } from './ui/FabButton';
 import { Composer } from './ui/Composer';
+import { P2PStatusBar } from './ui/P2PStatusBar';
+import { openThread } from './ui/threadNavigation';
 import type { NostrEvent } from './nostr/types';
 
 const FEED_SCROLL_KEY = 'honeytrap:feed-scroll-top';
@@ -26,7 +28,8 @@ function Feed() {
     publishReply,
     mediaRelayList,
     settings,
-    attachMedia
+    attachMedia,
+    torrents
   } = useAppState();
   const [composerOpen, setComposerOpen] = useState(false);
   const [replyTarget, setReplyTarget] = useState<NostrEvent | undefined>(undefined);
@@ -39,6 +42,9 @@ function Feed() {
   const pullStartRef = useRef<number | null>(null);
   const wheelPullRef = useRef<number>(0);
   const wheelTimerRef = useRef<number | null>(null);
+  const loadOlderInFlightRef = useRef(false);
+  const lastLoadOlderAttemptRef = useRef(0);
+  const lastAutoFlushRef = useRef(0);
 
   useEffect(() => {
     if (location.pathname !== '/') return;
@@ -58,6 +64,27 @@ function Feed() {
       }
     };
   }, []);
+
+  const loadOlderSafe = () => {
+    const now = Date.now();
+    if (loadOlderInFlightRef.current) return;
+    if (now - lastLoadOlderAttemptRef.current < 350) return;
+    lastLoadOlderAttemptRef.current = now;
+    loadOlderInFlightRef.current = true;
+    loadOlder()
+      .catch(() => null)
+      .finally(() => {
+        loadOlderInFlightRef.current = false;
+      });
+  };
+
+  const flushPendingSafe = () => {
+    if (pendingCount <= 0) return;
+    const now = Date.now();
+    if (now - lastAutoFlushRef.current < 400) return;
+    lastAutoFlushRef.current = now;
+    flushPending();
+  };
 
   return (
     <div
@@ -114,15 +141,23 @@ function Feed() {
         }}
         className="feed-virtuoso"
         data={events}
+        computeItemKey={(_, event) => event.id}
         overscan={600}
-        endReached={() => loadOlder().catch(() => null)}
+        endReached={() => loadOlderSafe()}
+        atBottomStateChange={(atBottom) => {
+          if (atBottom) loadOlderSafe();
+        }}
+        startReached={() => flushPendingSafe()}
+        atTopStateChange={(atTop) => {
+          if (atTop) flushPendingSafe();
+        }}
         itemContent={(_, event) => (
           <div className="feed-item">
             <PostCard
               event={event}
               profile={profiles[event.pubkey]}
               onSelect={selectEvent}
-              onOpenThread={() => navigate(`/thread/${event.id}`, { state: { event } })}
+              onOpenThread={() => openThread(navigate, event)}
               showActions
               actionsPosition="top"
               onReply={() => {
@@ -150,6 +185,7 @@ function Feed() {
         mediaRelays={mediaRelayList.length > 0 ? mediaRelayList : settings.mediaRelays}
         onAttachMedia={attachMedia}
       />
+      <P2PStatusBar torrents={torrents} enabled={settings.p2p.enabled} />
     </div>
   );
 }
@@ -163,11 +199,11 @@ function AppRoutes() {
   }, [location.pathname, setPaused]);
 
   return (
-    <Routes location={location} key={location.pathname}>
+    <Routes>
       <Route path="/" element={<Feed />} />
-      <Route path="/thread/:id" element={<ThreadStack />} />
-      <Route path="/author/:pubkey" element={<AuthorView />} />
-      <Route path="/tag/:tag" element={<HashtagView />} />
+      <Route path="/thread/:id" element={<ThreadStack key={location.pathname} />} />
+      <Route path="/author/:pubkey" element={<AuthorView key={location.pathname} />} />
+      <Route path="/tag/:tag" element={<HashtagView key={location.pathname} />} />
     </Routes>
   );
 }

@@ -1,6 +1,7 @@
 declare module 'webtorrent' {
   export interface TorrentFile {
     length: number;
+    arrayBuffer(): Promise<ArrayBuffer>;
     getBuffer(cb: (err: Error | null, data?: Uint8Array) => void): void;
   }
 

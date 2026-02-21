@@ -18,7 +18,7 @@ export class FeedOrchestrator implements FeedOrchestratorApi {
   private profileQueue = new Set<string>();
   private profileInflight = new Set<string>();
   private profileDrainTimer?: ReturnType<typeof setTimeout>;
-  private maxProfileInflight = 2;
+  private maxProfileInflight = 8;
   private hydrated = false;
   private lastContext?: { follows: string[]; followers: string[]; feedMode: 'all' | 'follows' | 'followers' | 'both'; listId?: string; lists?: ListDescriptor[]; tags?: string[] };
   private cache?: NostrCache;
@@ -28,6 +28,7 @@ export class FeedOrchestrator implements FeedOrchestratorApi {
   private lastOnProfiles?: (profiles: Record<string, ProfileMetadata>) => void;
   private lastOnPending?: (count: number) => void;
   private liveFlushTimer?: ReturnType<typeof setTimeout>;
+  private liveSubscribed = false;
 
   constructor(
     private nostr: NostrClient,
@@ -52,10 +53,11 @@ export class FeedOrchestrator implements FeedOrchestratorApi {
     this.paused = value;
     if (value) {
       this.clearLiveFlushTimer();
-      this.service.stop();
       return;
     }
-    this.startLiveSubscription();
+    if (!this.liveSubscribed) {
+      this.startLiveSubscription();
+    }
     if (wasPaused && !value) {
       this.resumeIfBuffered();
     }
@@ -113,6 +115,7 @@ export class FeedOrchestrator implements FeedOrchestratorApi {
         filtered.forEach((event) => this.knownIds.add(event.id));
         const merged = this.mergeEvents(getEvents(), filtered);
         onUpdate(merged);
+        this.queueProfilesForEvents(merged, onProfiles);
       })
       .catch(() => null);
 
@@ -121,6 +124,7 @@ export class FeedOrchestrator implements FeedOrchestratorApi {
 
   stop() {
     this.clearLiveFlushTimer();
+    this.liveSubscribed = false;
     this.service.stop();
   }
 
@@ -162,6 +166,9 @@ export class FeedOrchestrator implements FeedOrchestratorApi {
     unique.forEach((event) => this.markTransport(event));
     const merged = this.mergeEvents(getEvents(), unique);
     onUpdate(merged);
+    if (this.lastOnProfiles) {
+      this.queueProfilesForEvents(merged, this.lastOnProfiles);
+    }
     this.cache?.setEvents(unique).catch(() => null);
     this.cache?.setRecentEvents(merged.slice(0, 120)).catch(() => null);
   }
@@ -174,39 +181,57 @@ export class FeedOrchestrator implements FeedOrchestratorApi {
 
   private drainProfiles(onProfiles: (profiles: Record<string, ProfileMetadata>) => void) {
     if (this.profileDrainTimer) return;
+    // Do not start a new batch while one is already in-flight; the .finally()
+    // callback will re-schedule as needed.  This prevents stacking multiple
+    // concurrent querySync REQs on the relay (each querySync = one live REQ).
+    if (this.profileInflight.size > 0) return;
     const run = () => {
       this.profileDrainTimer = undefined;
-      if (this.profileInflight.size >= this.maxProfileInflight) {
-        this.profileDrainTimer = globalThis.setTimeout(run, 400);
+      if (this.profileInflight.size > 0) {
+        // A batch is still running; it will call drainProfiles again on completion.
         return;
       }
-      const next = this.profileQueue.values().next().value as string | undefined;
-      if (!next) return;
-      if (this.profiles[next] || this.profileInflight.has(next)) {
-        this.profileQueue.delete(next);
-        this.profileDrainTimer = globalThis.setTimeout(run, 120);
-        return;
+      // Collect up to maxProfileInflight pubkeys as a single batch.
+      const toFetch: string[] = [];
+      for (const pubkey of this.profileQueue) {
+        if (toFetch.length >= this.maxProfileInflight) break;
+        if (this.profiles[pubkey] || this.profileInflight.has(pubkey)) {
+          this.profileQueue.delete(pubkey);
+          continue;
+        }
+        this.profileQueue.delete(pubkey);
+        toFetch.push(pubkey);
       }
-      this.profileQueue.delete(next);
-      this.profileInflight.add(next);
+      if (toFetch.length === 0) return;
+      toFetch.forEach((pubkey) => this.profileInflight.add(pubkey));
+      // Issue a single batched relay request.  Do NOT schedule the next batch
+      // here — wait until this one finishes so we never have two concurrent REQs
+      // open just for profile fetching.
       this.nostr
-        .fetchProfile(next)
-        .then((profile) => {
-          if (!profile) return;
-          this.profiles = { ...this.profiles, [next]: profile };
-          onProfiles(this.profiles);
+        .fetchProfiles(toFetch)
+        .then((fetched) => {
+          let changed = false;
+          for (const [pubkey, profile] of Object.entries(fetched)) {
+            this.profiles = { ...this.profiles, [pubkey]: profile };
+            changed = true;
+          }
+          if (changed) onProfiles(this.profiles);
         })
         .catch(() => null)
         .finally(() => {
-          this.profileInflight.delete(next);
-          this.profileDrainTimer = globalThis.setTimeout(run, 200);
+          toFetch.forEach((pubkey) => this.profileInflight.delete(pubkey));
+          // Schedule the next batch only after this one is complete.
+          if (this.profileQueue.size > 0) {
+            this.drainProfiles(onProfiles);
+          }
         });
     };
-    this.profileDrainTimer = globalThis.setTimeout(run, 120);
+    this.profileDrainTimer = globalThis.setTimeout(run, 20);
   }
 
   private startLiveSubscription() {
     if (this.paused) return;
+    if (this.liveSubscribed) return;
     if (!this.lastContext || !this.lastGetEvents || !this.lastOnUpdate || !this.lastOnProfiles) return;
     const { follows, followers, feedMode, listId, lists, tags } = this.lastContext;
     const getEvents = this.lastGetEvents;
@@ -227,6 +252,7 @@ export class FeedOrchestrator implements FeedOrchestratorApi {
       tags,
       onEvent: (event) => this.handleIncomingEvent(event, authorSet, normalizedTags, getEvents, onUpdate, onProfiles, onPending)
     });
+    this.liveSubscribed = true;
   }
 
   private handleIncomingEvent(
@@ -246,7 +272,7 @@ export class FeedOrchestrator implements FeedOrchestratorApi {
     if (this.paused && this.hydrated) {
       this.pending.push(event);
       if (this.pending.length > MAX_BUFFER) {
-        this.pending.length = MAX_BUFFER;
+        this.pending.splice(0, this.pending.length - MAX_BUFFER);
       }
       return;
     }
@@ -254,11 +280,17 @@ export class FeedOrchestrator implements FeedOrchestratorApi {
     this.onEventAssist?.(event);
     this.pending.push(event);
     if (this.pending.length > MAX_BUFFER) {
-      this.pending.length = MAX_BUFFER;
+      this.pending.splice(0, this.pending.length - MAX_BUFFER);
     }
     onPending?.(this.pending.length);
     this.profileQueue.add(event.pubkey);
-    this.scheduleLiveFlush(getEvents, onUpdate, onPending);
+    // After the initial load is hydrated, stop auto-flushing new live events
+    // into the displayed list. They accumulate in pending until the user
+    // explicitly pulls to refresh (flushPending). This prevents non-stop
+    // re-sorting and layout thrash while the user is reading.
+    if (!this.hydrated) {
+      this.scheduleLiveFlush(getEvents, onUpdate, onPending);
+    }
     this.drainProfiles(onProfiles);
   }
 
@@ -320,6 +352,16 @@ export class FeedOrchestrator implements FeedOrchestratorApi {
       .slice(0, MAX_EVENTS);
     this.oldest = merged[merged.length - 1]?.created_at ?? this.oldest;
     return merged;
+  }
+
+  private queueProfilesForEvents(events: NostrEvent[], onProfiles: (profiles: Record<string, ProfileMetadata>) => void) {
+    let queued = false;
+    events.forEach((event) => {
+      if (this.profiles[event.pubkey] || this.profileInflight.has(event.pubkey) || this.profileQueue.has(event.pubkey)) return;
+      this.profileQueue.add(event.pubkey);
+      queued = true;
+    });
+    if (queued) this.drainProfiles(onProfiles);
   }
 
   private markTransport(event: NostrEvent) {

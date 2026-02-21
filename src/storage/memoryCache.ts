@@ -1,86 +1,44 @@
-interface MemoryCacheOptions<T> {
+import { LRUCache } from 'lru-cache';
+
+interface MemoryCacheOptions<T extends {}> {
   maxEntries?: number;
   ttlMs?: number;
   onEvict?: (value: T) => void;
 }
 
-interface MemoryCacheEntry<T> {
-  value: T;
-  expiresAt: number;
-  accessAt: number;
-}
-
-export class MemoryCache<T> {
-  private entries = new Map<string, MemoryCacheEntry<T>>();
-  private maxEntries: number;
-  private ttlMs: number;
+export class MemoryCache<T extends {}> {
+  private entries: LRUCache<string, T>;
   private onEvict?: (value: T) => void;
 
   constructor(options: MemoryCacheOptions<T> = {}) {
-    this.maxEntries = options.maxEntries ?? 200;
-    this.ttlMs = options.ttlMs ?? 15 * 60 * 1000;
     this.onEvict = options.onEvict;
-  }
-
-  get(key: string): T | undefined {
-    const entry = this.entries.get(key);
-    if (!entry) return undefined;
-    const now = Date.now();
-    if (entry.expiresAt <= now) {
-      this.evictKey(key, entry);
-      return undefined;
-    }
-    entry.accessAt = now;
-    return entry.value;
-  }
-
-  set(key: string, value: T): void {
-    const now = Date.now();
-    const existing = this.entries.get(key);
-    if (existing) {
-      this.evictKey(key, existing);
-    }
-    this.entries.set(key, {
-      value,
-      expiresAt: now + this.ttlMs,
-      accessAt: now
-    });
-    this.evictIfNeeded();
-  }
-
-  delete(key: string): void {
-    const entry = this.entries.get(key);
-    if (!entry) return;
-    this.evictKey(key, entry);
-  }
-
-  purgeExpired(): void {
-    const now = Date.now();
-    this.entries.forEach((entry, key) => {
-      if (entry.expiresAt <= now) {
-        this.evictKey(key, entry);
+    this.entries = new LRUCache<string, T>({
+      max: options.maxEntries ?? 200,
+      ttl: options.ttlMs ?? 15 * 60 * 1000,
+      updateAgeOnGet: true,
+      dispose: (value) => {
+        this.onEvict?.(value);
       }
     });
   }
 
+  get(key: string): T | undefined {
+    return this.entries.get(key);
+  }
+
+  set(key: string, value: T): void {
+    this.entries.set(key, value);
+  }
+
+  delete(key: string): void {
+    this.entries.delete(key);
+  }
+
+  purgeExpired(): void {
+    this.entries.purgeStale();
+  }
+
   size(): number {
     return this.entries.size;
-  }
-
-  private evictKey(key: string, entry: MemoryCacheEntry<T>) {
-    this.entries.delete(key);
-    this.onEvict?.(entry.value);
-  }
-
-  private evictIfNeeded() {
-    if (this.entries.size <= this.maxEntries) return;
-    const entries = Array.from(this.entries.entries())
-      .sort((a, b) => a[1].accessAt - b[1].accessAt);
-    const toRemove = entries.length - this.maxEntries;
-    for (let i = 0; i < toRemove; i += 1) {
-      const [key, entry] = entries[i] ?? [];
-      if (!key || !entry) continue;
-      this.evictKey(key, entry);
-    }
   }
 }

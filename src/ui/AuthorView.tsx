@@ -9,6 +9,7 @@ import { FabButton } from './FabButton';
 import { Composer } from './Composer';
 import { decodeKey } from '../nostr/auth';
 import { IconButton } from './IconButton';
+import { openThread } from './threadNavigation';
 
 export function AuthorView() {
   const { pubkey } = useParams<{ pubkey: string }>();
@@ -51,11 +52,13 @@ export function AuthorView() {
 
   useEffect(() => {
     if (!resolvedPubkey) {
+      eventsRef.current = [];
       setEvents([]);
       setProfile(undefined);
       setLoading(false);
       return;
     }
+    eventsRef.current = [];
     setEvents([]);
     setProfile(undefined);
     setLoading(true);
@@ -99,6 +102,7 @@ export function AuthorView() {
       <Virtuoso
         className="feed-virtuoso"
         data={events}
+        computeItemKey={(_, event) => event.id}
         overscan={600}
         components={{
           Header: () => (
@@ -155,7 +159,7 @@ export function AuthorView() {
               event={event}
               profile={profiles[event.pubkey] ?? profile}
               onSelect={selectEvent}
-              onOpenThread={() => navigate(`/thread/${event.id}`, { state: { event } })}
+              onOpenThread={() => openThread(navigate, event)}
               showActions
               actionsPosition="top"
               onReply={() => {

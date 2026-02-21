@@ -19,6 +19,10 @@ class FakeClient {
   async fetchProfile() {
     return undefined;
   }
+
+  async fetchProfiles() {
+    return {};
+  }
 }
 
 function makeEvent(id: string, pubkey: string, patch: Partial<NostrEvent> = {}): NostrEvent {
@@ -223,7 +227,7 @@ describe('FeedOrchestrator filtering', () => {
     expect(updates[1]?.some((event) => event.id === 'buffered')).toBe(true);
   });
 
-  it('stops live subscription when paused and restarts on resume', () => {
+  it('keeps live subscription active while paused and avoids resubscribe churn', () => {
     const service = new FakeService();
     const client = new FakeClient();
     const orchestrator = new FeedOrchestrator(client as any, service as any);
@@ -237,10 +241,45 @@ describe('FeedOrchestrator filtering', () => {
     expect(service.subscribeCalls).toBe(1);
 
     orchestrator.setPaused(true);
-    expect(service.stopCalls).toBe(1);
+    expect(service.stopCalls).toBe(0);
 
     orchestrator.setPaused(false);
-    expect(service.subscribeCalls).toBe(2);
+    expect(service.subscribeCalls).toBe(1);
+  });
+
+  it('loads profiles for cached timeline events', async () => {
+    const service = new FakeService();
+    const fetchProfiles = vi.fn(async () => ({
+      alice: { name: 'Alice' }
+    }));
+    const client = {
+      fetchProfile: vi.fn(async () => undefined),
+      fetchProfiles
+    };
+    const cache = {
+      getRecentEvents: vi.fn(async () => [makeEvent('cached-1', 'alice')]),
+      setRecentEvents: vi.fn(async () => undefined),
+      setEvents: vi.fn(async () => undefined)
+    };
+    const orchestrator = new FeedOrchestrator(client as any, service as any, undefined, undefined, undefined, cache as any);
+    const onProfiles = vi.fn();
+    let current: NostrEvent[] = [];
+
+    orchestrator.subscribe(
+      { follows: [], followers: [], feedMode: 'all' },
+      () => current,
+      (next) => {
+        current = next;
+      },
+      onProfiles
+    );
+
+    await vi.runAllTimersAsync();
+
+    expect(fetchProfiles).toHaveBeenCalledWith(['alice']);
+    expect(onProfiles).toHaveBeenCalledWith(expect.objectContaining({
+      alice: expect.objectContaining({ name: 'Alice' })
+    }));
   });
 
   it('batches live updates across burst events', () => {
@@ -267,5 +306,37 @@ describe('FeedOrchestrator filtering', () => {
 
     expect(updates.length).toBe(1);
     expect(updates[0]?.map((event) => event.id)).toEqual(['3', '2', '1']);
+  });
+
+  it('keeps newest buffered events when pending exceeds cap', () => {
+    const service = new FakeService();
+    const client = new FakeClient();
+    const orchestrator = new FeedOrchestrator(client as any, service as any);
+    const updates: NostrEvent[][] = [];
+    let current: NostrEvent[] = [];
+
+    orchestrator.subscribe(
+      { follows: ['alice'], followers: [], feedMode: 'follows' },
+      () => current,
+      (next) => {
+        current = next;
+        updates.push(next);
+      },
+      () => null
+    );
+
+    service.onEvent?.(makeEvent('hydrated', 'alice', { created_at: 1_000 }));
+    vi.runAllTimers();
+
+    orchestrator.setPaused(true);
+    for (let i = 1; i <= 405; i += 1) {
+      service.onEvent?.(makeEvent(`e${i}`, 'alice', { created_at: 2_000 + i }));
+    }
+
+    orchestrator.setPaused(false);
+    vi.runAllTimers();
+
+    const latest = updates[updates.length - 1] ?? [];
+    expect(latest.some((event) => event.id === 'e405')).toBe(true);
   });
 });

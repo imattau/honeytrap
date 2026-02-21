@@ -64,7 +64,7 @@ export class NwcClient {
       content: encrypted
     };
     const signed = finalizeEvent(unsigned, hexToBytes(this.connection.secret));
-    await Promise.allSettled(this.pool.publish(this.connection.relays, signed as NostrEvent));
+    await publishToRelays(this.pool, this.connection.relays, signed as NostrEvent);
     await this.waitForResponse(signed.id, timeoutMs);
   }
 
@@ -117,6 +117,29 @@ export class NwcClient {
       }, timeoutMs);
     });
   }
+}
+
+async function publishToRelays(pool: SimplePool, relays: string[], event: NostrEvent): Promise<void> {
+  if (relays.length === 0) {
+    throw new Error('Missing relay in NWC URI');
+  }
+  const results = await Promise.allSettled(pool.publish(relays, event));
+  const ok = results.some((result) => result.status === 'fulfilled');
+  if (ok) return;
+  const reasons = results
+    .filter((result): result is PromiseRejectedResult => result.status === 'rejected')
+    .map((result) => errorMessage(result.reason))
+    .filter(Boolean);
+  if (reasons.length > 0) {
+    throw new Error(`Wallet request publish failed: ${reasons.join('; ')}`);
+  }
+  throw new Error('Wallet request publish failed');
+}
+
+function errorMessage(reason: unknown): string {
+  if (reason instanceof Error && reason.message) return reason.message;
+  if (typeof reason === 'string') return reason;
+  return '';
 }
 
 function normalizeSecret(secret: string): string {

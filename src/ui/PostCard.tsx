@@ -27,7 +27,7 @@ interface PostCardProps {
   actionsPosition?: 'top' | 'bottom';
 }
 
-export function PostCard({
+export const PostCard = React.memo(function PostCard({
   event,
   profile,
   onSelect,
@@ -192,7 +192,7 @@ export function PostCard({
           <IconButton title="Relay" ariaLabel="Relay" active={status.relay} tone="relay">
             <Radio size={16} />
           </IconButton>
-          <IconButton title="P2P assist" ariaLabel="P2P assist" active={status.p2p} tone="p2p">
+          <IconButton title="P2P assist" ariaLabel="P2P assist" active={status.p2p} tone="p2p" className={status.p2p ? 'icon-btn--p2p-live' : undefined}>
             <Bolt size={16} />
           </IconButton>
           <IconButton title="HTTP fallback" ariaLabel="HTTP fallback" active={status.http} tone="http">
@@ -229,7 +229,7 @@ export function PostCard({
         </button>
       )}
 
-      <div className={`post-content ${isExpanded ? 'expanded' : 'collapsed'} ${isSensitive && !revealed ? 'nsfw-blur' : ''}`} onClick={onOpenThread}>
+      <div className={`post-content ${isExpanded ? 'expanded' : 'collapsed'} ${isSensitive && !revealed ? 'nsfw-blur' : ''}`} onClick={(e) => { e.stopPropagation(); onOpenThread?.(); }}>
         {isLongForm ? (
           <div className="space-y-2">
             <div className="post-title">{longForm?.title ?? 'Untitled long-form'}</div>
@@ -282,7 +282,7 @@ export function PostCard({
       )}
     </article>
   );
-}
+});
 
 function splitNostrContent(content: string) {
   const regex = /(nostr:[a-z0-9]+)/g;
@@ -379,11 +379,11 @@ function MediaItem({
       eventId,
       authorPubkey,
       source: { url: item.url, magnet: item.magnet, sha256: item.sha256, type: 'media' },
-      timeoutMs: isVideo ? 4000 : 1500
+      timeoutMs: isVideo ? 4000 : 800
     })
       .then((result) => {
         if (!active) return;
-        setSrc(result.url);
+        if (result.url !== item.url) setSrc(result.url);
       })
       .catch(() => null);
     return () => {

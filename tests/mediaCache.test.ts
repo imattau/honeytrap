@@ -24,13 +24,11 @@ describe('MediaCache', () => {
     expect((URL.revokeObjectURL as any).mock.calls[0][0]).toBe('blob:a');
   });
 
-  it('expires entries by ttl', () => {
-    vi.useFakeTimers();
-    const cache = new MediaCache({ maxEntries: 2, ttlMs: 1000 });
+  it('expires entries by ttl', async () => {
+    const cache = new MediaCache({ maxEntries: 2, ttlMs: 10 });
     cache.set('a', { url: 'blob:a', source: 'p2p' });
-    vi.setSystemTime(Date.now() + 1500);
+    await new Promise((resolve) => setTimeout(resolve, 25));
     cache.purgeExpired();
     expect(cache.get('a')).toBeUndefined();
-    vi.useRealTimers();
   });
 });

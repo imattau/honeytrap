@@ -33,7 +33,8 @@ export class MagnetBuilder {
 
   async buildMediaPackage(url: string): Promise<MagnetResult> {
     if (!this.hub?.getClient() || !this.settings.enabled) return {};
-    const response = await fetch(url);
+    const response = await fetchWithTimeout(url, 10_000);
+    if (!response.ok) return {};
     const data = await response.arrayBuffer();
     const sizeMb = data.byteLength / 1024 / 1024;
     if (sizeMb > this.settings.maxFileSizeMb) return {};
@@ -99,4 +100,28 @@ function fileNameFromUrl(url: string): string {
   } catch {
     return 'media.bin';
   }
+}
+
+async function fetchWithTimeout(url: string, timeoutMs: number): Promise<Response> {
+  const safeTimeoutMs = Math.max(1, timeoutMs);
+  const timeoutSignal = getTimeoutSignal(safeTimeoutMs);
+  try {
+    return await fetch(url, { signal: timeoutSignal.signal });
+  } finally {
+    timeoutSignal.cleanup();
+  }
+}
+
+function getTimeoutSignal(timeoutMs: number): { signal: AbortSignal; cleanup: () => void } {
+  if (typeof AbortSignal.timeout === 'function') {
+    return { signal: AbortSignal.timeout(timeoutMs), cleanup: () => undefined };
+  }
+  const controller = new AbortController();
+  const timer = globalThis.setTimeout(() => {
+    controller.abort();
+  }, timeoutMs);
+  return {
+    signal: controller.signal,
+    cleanup: () => globalThis.clearTimeout(timer)
+  };
 }

@@ -23,6 +23,8 @@ function makeSource(patch: Partial<AssistSource> = {}): AssistSource {
 }
 
 const fetchSpy = vi.fn(async () => ({
+  ok: true,
+  status: 200,
   arrayBuffer: async () => new TextEncoder().encode('data').buffer
 }));
 
@@ -46,5 +48,28 @@ describe('WebTorrentAssist HTTP fallback', () => {
     const result = await assist.fetchWithAssist(source, 1000, true);
     expect(result.source).toBe('http');
     expect(fetchSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('throws when HTTP fallback returns a non-2xx status', async () => {
+    fetchSpy.mockResolvedValueOnce({
+      ok: false,
+      status: 503,
+      arrayBuffer: async () => new ArrayBuffer(0)
+    });
+    const assist = new WebTorrentAssist(makeSettings());
+    const source = makeSource({ magnet: undefined });
+    await expect(assist.fetchWithAssist(source, 1000, true)).rejects.toThrow('HTTP assist failed with status 503');
+  });
+
+  it('throws a timeout error when HTTP fallback does not respond in time', async () => {
+    fetchSpy.mockImplementationOnce((_url: string, init?: RequestInit) => new Promise((_resolve, reject) => {
+      const signal = init?.signal as AbortSignal | undefined;
+      signal?.addEventListener('abort', () => {
+        reject(Object.assign(new Error('aborted'), { name: 'AbortError' }));
+      });
+    }));
+    const assist = new WebTorrentAssist(makeSettings());
+    const source = makeSource({ magnet: undefined });
+    await expect(assist.fetchWithAssist(source, 1, true)).rejects.toThrow('HTTP assist timed out');
   });
 });

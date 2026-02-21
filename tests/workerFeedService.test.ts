@@ -68,6 +68,15 @@ describe('WorkerFeedService', () => {
     vi.useRealTimers();
   });
 
+  it('uses crypto.randomUUID for request ids when available', () => {
+    const randomUUIDSpy = vi.spyOn(globalThis.crypto, 'randomUUID').mockReturnValue('fixed-id');
+    const service = new WorkerFeedService({} as any);
+    service.subscribeTimeline({ onEvent: () => null });
+    const subscribe = instance.messages.find((message) => message.type === 'subscribe');
+    expect(subscribe.reqId).toBe('feed-fixed-id');
+    randomUUIDSpy.mockRestore();
+  });
+
   it('forwards batched worker events', () => {
     vi.useFakeTimers();
     const service = new WorkerFeedService({} as any);

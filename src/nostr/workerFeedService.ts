@@ -1,4 +1,5 @@
 import type { NostrEvent } from './types';
+import Denque from 'denque';
 import { FeedService } from './service';
 import type { FeedServiceApi } from './contracts';
 import type { NostrClient } from './client';
@@ -20,7 +21,7 @@ export class WorkerFeedService implements FeedServiceApi {
   private backoffMs = 600;
   private retryTimer?: ReturnType<typeof setTimeout>;
   private deliveryTimer?: ReturnType<typeof setTimeout>;
-  private deliveryQueue: NostrEvent[] = [];
+  private deliveryQueue = new Denque<NostrEvent>();
   private delivering = false;
   private active = false;
 
@@ -50,7 +51,7 @@ export class WorkerFeedService implements FeedServiceApi {
       onClose: input.onClose
     };
     this.backoffMs = 600;
-    this.reqId = `feed-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    this.reqId = createRequestId();
     this.post({
       type: 'subscribe',
       reqId: this.reqId,
@@ -66,7 +67,7 @@ export class WorkerFeedService implements FeedServiceApi {
     this.retryTimer = undefined;
     if (this.deliveryTimer) globalThis.clearTimeout(this.deliveryTimer);
     this.deliveryTimer = undefined;
-    this.deliveryQueue = [];
+    this.deliveryQueue.clear();
     this.delivering = false;
     if (!this.worker) {
       this.fallback.stop();
@@ -123,7 +124,9 @@ export class WorkerFeedService implements FeedServiceApi {
 
   private enqueueEvents(events: NostrEvent[]) {
     if (!this.active || !this.state) return;
-    this.deliveryQueue.push(...events);
+    for (const event of events) {
+      this.deliveryQueue.push(event);
+    }
     if (this.delivering) return;
     this.delivering = true;
     this.deliveryTimer = globalThis.setTimeout(() => this.flushEvents(), 0);
@@ -132,19 +135,19 @@ export class WorkerFeedService implements FeedServiceApi {
   private flushEvents() {
     this.deliveryTimer = undefined;
     if (!this.active || !this.state) {
-      this.deliveryQueue = [];
+      this.deliveryQueue.clear();
       this.delivering = false;
       return;
     }
     const start = Date.now();
     let processed = 0;
-    while (this.deliveryQueue.length > 0 && processed < 80 && (Date.now() - start) < 8) {
+    while (!this.deliveryQueue.isEmpty() && processed < 80 && (Date.now() - start) < 8) {
       const event = this.deliveryQueue.shift();
       if (!event) break;
       this.state.onEvent(event);
       processed += 1;
     }
-    if (this.deliveryQueue.length > 0) {
+    if (!this.deliveryQueue.isEmpty()) {
       this.deliveryTimer = globalThis.setTimeout(() => this.flushEvents(), 0);
       return;
     }
@@ -155,4 +158,12 @@ export class WorkerFeedService implements FeedServiceApi {
 function createWorker(): Worker | undefined {
   if (typeof Worker === 'undefined') return undefined;
   return new Worker(new URL('./worker/feedFetch.worker.ts', import.meta.url), { type: 'module' });
+}
+
+function createRequestId(): string {
+  const randomUUID = globalThis.crypto?.randomUUID;
+  if (typeof randomUUID === 'function') {
+    return `feed-${randomUUID.call(globalThis.crypto)}`;
+  }
+  return `feed-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }

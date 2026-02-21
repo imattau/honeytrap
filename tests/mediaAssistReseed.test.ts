@@ -16,6 +16,8 @@ vi.mock('../src/p2p/mediaBlobCache', () => {
 });
 
 const fetchSpy = vi.fn(async () => ({
+  ok: true,
+  status: 200,
   arrayBuffer: async () => new TextEncoder().encode('data').buffer
 }));
 const originalURL = globalThis.URL;

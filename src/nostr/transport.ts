@@ -4,11 +4,12 @@ import type { TransportStatus } from './transportTypes';
 type TransportListener = (snapshot: Record<string, TransportStatus>) => void;
 type TransportKeyListener = () => void;
 const EMPTY_STATUS: TransportStatus = Object.freeze({});
+const TRANSPORT_CHANGE_EVENT = 'transport:change';
+const TRANSPORT_KEY_PREFIX = 'transport:key:';
 
 export class TransportStore implements TransportStoreApi {
   private map = new Map<string, TransportStatus>();
-  private listeners = new Set<TransportListener>();
-  private keyListeners = new Map<string, Set<TransportKeyListener>>();
+  private target = new EventTarget();
 
   get(id: string): TransportStatus {
     return this.map.get(id) ?? EMPTY_STATUS;
@@ -23,10 +24,11 @@ export class TransportStore implements TransportStoreApi {
   }
 
   subscribe(listener: TransportListener) {
-    this.listeners.add(listener);
+    const handler = () => listener(this.snapshot());
+    this.target.addEventListener(TRANSPORT_CHANGE_EVENT, handler);
     listener(this.snapshot());
     return () => {
-      this.listeners.delete(listener);
+      this.target.removeEventListener(TRANSPORT_CHANGE_EVENT, handler);
     };
   }
 
@@ -39,24 +41,18 @@ export class TransportStore implements TransportStoreApi {
   }
 
   subscribeKey(id: string, listener: TransportKeyListener) {
-    const bucket = this.keyListeners.get(id) ?? new Set<TransportKeyListener>();
-    bucket.add(listener);
-    this.keyListeners.set(id, bucket);
+    const keyEvent = `${TRANSPORT_KEY_PREFIX}${id}`;
+    const handler = () => listener();
+    this.target.addEventListener(keyEvent, handler);
     return () => {
-      const existing = this.keyListeners.get(id);
-      if (!existing) return;
-      existing.delete(listener);
-      if (existing.size === 0) this.keyListeners.delete(id);
+      this.target.removeEventListener(keyEvent, handler);
     };
   }
 
   private emit(id?: string) {
-    if (this.listeners.size > 0) {
-      const snapshot = this.snapshot();
-      this.listeners.forEach((listener) => listener(snapshot));
-    }
+    this.target.dispatchEvent(new Event(TRANSPORT_CHANGE_EVENT));
     if (!id) return;
-    this.keyListeners.get(id)?.forEach((listener) => listener());
+    this.target.dispatchEvent(new Event(`${TRANSPORT_KEY_PREFIX}${id}`));
   }
 }
 

@@ -1,4 +1,4 @@
-import { MemoryCache } from '../storage/memoryCache';
+import { LRUCache } from 'lru-cache';
 import type { MediaAssistResult } from './types';
 
 interface MediaCacheOptions {
@@ -7,13 +7,15 @@ interface MediaCacheOptions {
 }
 
 export class MediaCache {
-  private cache: MemoryCache<MediaAssistResult>;
+  private cache: LRUCache<string, MediaAssistResult>;
 
   constructor(options: MediaCacheOptions = {}) {
-    this.cache = new MemoryCache<MediaAssistResult>({
-      maxEntries: options.maxEntries ?? 160,
-      ttlMs: options.ttlMs ?? 20 * 60 * 1000,
-      onEvict: (value) => {
+    this.cache = new LRUCache<string, MediaAssistResult>({
+      max: options.maxEntries ?? 160,
+      ttl: options.ttlMs ?? 20 * 60 * 1000,
+      // Keep hot media object URLs alive while they're actively requested.
+      updateAgeOnGet: true,
+      dispose: (value) => {
         if (value.url.startsWith('blob:')) {
           URL.revokeObjectURL(value.url);
         }
@@ -30,10 +32,10 @@ export class MediaCache {
   }
 
   purgeExpired() {
-    this.cache.purgeExpired();
+    this.cache.purgeStale();
   }
 
   size() {
-    return this.cache.size();
+    return this.cache.size;
   }
 }
