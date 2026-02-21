@@ -102,6 +102,8 @@ interface AppStateValue {
   fetchLists: (pubkey: string) => Promise<ListDescriptor[]>;
   publishPeopleList: (input: { title: string; description?: string; pubkeys: string[]; kind?: number }) => Promise<void>;
   saveP2PSettings: (settings: AppSettings['p2p'], updatedAt: number) => Promise<void>;
+  mergeProfiles: (profiles: Record<string, ProfileMetadata>) => void;
+  hydrateProfiles: (pubkeys: string[]) => Promise<void>;
 }
 
 const AppState = createContext<AppStateValue | undefined>(undefined);
@@ -154,6 +156,8 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   });
 
   const [selfProfile, setSelfProfile] = useState<ProfileMetadata | undefined>(undefined);
+  const profilesRef = useRef<Record<string, ProfileMetadata>>({});
+  const profileHydrationInflightRef = useRef<Set<string>>(new Set());
 
   const authorService = useMemo(
     () => new AuthorService(nostr, transportStore, isBlockedRef, eventVerifier),
@@ -223,6 +227,10 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     const next = feedState.profiles[keys?.npub ?? ''];
     if (next) setSelfProfile(next);
   }, [feedState.profiles, keys]);
+
+  useEffect(() => {
+    profilesRef.current = feedState.profiles;
+  }, [feedState.profiles]);
 
   useEffect(() => {
     feedState.applySettings(settings);
@@ -413,6 +421,39 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     await nostrCache.setProfile(keys.npub, profile);
   }, [feedState, keys, nostr, nostrCache, signer]);
 
+  const mergeProfiles = useCallback((incoming: Record<string, ProfileMetadata>) => {
+    const entries = Object.entries(incoming);
+    if (entries.length === 0) return;
+    feedState.setProfiles((prev) => {
+      let changed = false;
+      const next = { ...prev };
+      for (const [pubkey, profile] of entries) {
+        if (!profile) continue;
+        const prevProfile = prev[pubkey];
+        if (profilesEqual(prevProfile, profile)) continue;
+        next[pubkey] = profile;
+        changed = true;
+      }
+      return changed ? next : prev;
+    });
+  }, [feedState]);
+
+  const hydrateProfiles = useCallback(async (pubkeys: string[]) => {
+    const unique = Array.from(new Set(pubkeys.map((pubkey) => pubkey.trim()).filter(Boolean)));
+    if (unique.length === 0) return;
+    const missing = unique.filter(
+      (pubkey) => !profilesRef.current[pubkey] && !profileHydrationInflightRef.current.has(pubkey)
+    );
+    if (missing.length === 0) return;
+    missing.forEach((pubkey) => profileHydrationInflightRef.current.add(pubkey));
+    try {
+      const fetched = await nostr.fetchProfiles(missing);
+      mergeProfiles(fetched);
+    } finally {
+      missing.forEach((pubkey) => profileHydrationInflightRef.current.delete(pubkey));
+    }
+  }, [mergeProfiles, nostr]);
+
   const fetchFollowersFor = useCallback(async (pubkey: string) => {
     return nostr.fetchFollowers(pubkey, 600);
   }, [nostr]);
@@ -547,7 +588,9 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
         subscribeMentions,
         fetchLists,
         publishPeopleList,
-        saveP2PSettings
+        saveP2PSettings,
+        mergeProfiles,
+        hydrateProfiles
         }}
       >
         {children}
@@ -581,4 +624,20 @@ export function useFeedControlState() {
   const context = useContext(FeedControlState);
   if (!context) throw new Error('FeedControlState provider missing');
   return context;
+}
+
+function profilesEqual(a?: ProfileMetadata, b?: ProfileMetadata) {
+  if (!a && !b) return true;
+  if (!a || !b) return false;
+  return (
+    a.name === b.name &&
+    a.display_name === b.display_name &&
+    a.picture === b.picture &&
+    a.banner === b.banner &&
+    a.about === b.about &&
+    a.website === b.website &&
+    a.nip05 === b.nip05 &&
+    a.lud16 === b.lud16 &&
+    a.lud06 === b.lud06
+  );
 }

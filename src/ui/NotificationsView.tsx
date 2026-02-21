@@ -8,7 +8,7 @@ import { PostCard } from './PostCard';
 import { openThread } from './threadNavigation';
 
 export function NotificationsView() {
-  const { keys, profiles, fetchMentions, subscribeMentions } = useAppState();
+  const { keys, profiles, fetchMentions, subscribeMentions, hydrateProfiles } = useAppState();
   const navigate = useNavigate();
   const [events, setEvents] = useState<NostrEvent[]>([]);
   const [loading, setLoading] = useState(true);
@@ -33,6 +33,7 @@ export function NotificationsView() {
         if (!active) return;
         const sorted = dedupeEvents(loaded);
         setEvents(sorted);
+        hydrateProfiles(sorted.map((event) => event.pubkey)).catch(() => null);
         oldestRef.current = sorted[sorted.length - 1]?.created_at;
       })
       .catch(() => null)
@@ -46,6 +47,7 @@ export function NotificationsView() {
       (event) => {
         if (!active) return;
         setEvents((prev) => dedupeEvents([event, ...prev]));
+        hydrateProfiles([event.pubkey]).catch(() => null);
       },
       () => null
     ).then((close) => {
@@ -56,13 +58,14 @@ export function NotificationsView() {
       active = false;
       unsubscribe?.();
     };
-  }, [fetchMentions, keys?.npub, subscribeMentions]);
+  }, [fetchMentions, hydrateProfiles, keys?.npub, subscribeMentions]);
 
   const loadOlder = async () => {
     if (!keys?.npub || loadingOlderRef.current || !oldestRef.current) return;
     loadingOlderRef.current = true;
     try {
       const older = await fetchMentions(keys.npub, { until: oldestRef.current - 1, limit: 50 });
+      hydrateProfiles(older.map((event) => event.pubkey)).catch(() => null);
       setEvents((prev) => {
         const merged = dedupeEvents([...prev, ...older]);
         oldestRef.current = merged[merged.length - 1]?.created_at;

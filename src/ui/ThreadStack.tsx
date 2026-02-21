@@ -24,7 +24,8 @@ export function ThreadStack() {
     settings,
     findEventById,
     mediaRelayList,
-    attachMedia
+    attachMedia,
+    hydrateProfiles
   } = useAppState();
   const initialFallback = id ? (getThreadPreview(id) ?? findEventById(id)) : undefined;
   const [nodes, setNodes] = useState<ThreadNode[]>(
@@ -48,6 +49,7 @@ export function ThreadStack() {
     const fallback = getThreadPreview(id) ?? findEventById(id);
     if (fallback) {
       setNodes([{ event: fallback, depth: 0, role: 'target' }]);
+      hydrateProfiles([fallback.pubkey]).catch(() => null);
       setLoading(false);
     } else {
       setNodes([]);
@@ -58,6 +60,7 @@ export function ThreadStack() {
         if (!active) return;
         if (loaded.length > 0) {
           setNodes(loaded);
+          hydrateProfiles(loaded.map((node) => node.event.pubkey)).catch(() => null);
           setLoading(false);
           return;
         }
@@ -71,7 +74,7 @@ export function ThreadStack() {
     return () => {
       active = false;
     };
-  }, [id, loadThread, findEventById]);
+  }, [findEventById, hydrateProfiles, id, loadThread]);
 
   const isTouch = useMemo(() => window.matchMedia('(pointer: coarse)').matches, []);
 

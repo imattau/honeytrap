@@ -12,7 +12,7 @@ import { openThread } from './threadNavigation';
 export function HashtagView() {
   const { tag } = useParams<{ tag: string }>();
   const navigate = useNavigate();
-  const { hashtagService, profiles, selectEvent, publishReply, mediaRelayList, settings, attachMedia } = useAppState();
+  const { hashtagService, profiles, selectEvent, publishReply, mediaRelayList, settings, attachMedia, mergeProfiles } = useAppState();
   const [events, setEvents] = useState<NostrEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const eventsRef = useRef<NostrEvent[]>([]);
@@ -44,13 +44,16 @@ export function HashtagView() {
         setEvents(next);
         if (next.length > 0) setLoading(false);
       },
-      () => null
+      (incoming) => {
+        if (!active) return;
+        mergeProfiles(incoming);
+      }
     );
     return () => {
       active = false;
       hashtagService.stop();
     };
-  }, [hashtagService, normalized]);
+  }, [hashtagService, mergeProfiles, normalized]);
 
   return (
     <div className="author-view">

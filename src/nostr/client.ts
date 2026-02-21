@@ -109,19 +109,40 @@ export class NostrClient implements NostrClientApi {
       })
     );
     if (missing.length === 0) return result;
-    // Single relay subscription for all missing pubkeys.
-    const events = await this.safeQuerySync({ kinds: [0], authors: missing, limit: missing.length });
-    await Promise.all(
-      (events as NostrEvent[]).map(async (event) => {
-        try {
-          const profile = JSON.parse(event.content) as ProfileMetadata;
-          result[event.pubkey] = profile;
-          await this.cache?.setProfile(event.pubkey, profile);
-        } catch {
-          // ignore malformed profile
-        }
-      })
-    );
+    // Some relays can return multiple metadata events per author out-of-order.
+    // Over-fetch slightly and deterministically keep the newest valid profile per pubkey.
+    const initialLimit = Math.max(missing.length * 2, missing.length + 8);
+    const events = await this.safeQuerySync({ kinds: [0], authors: missing, limit: initialLimit });
+    const sorted = (events as NostrEvent[])
+      .slice()
+      .sort((a, b) => b.created_at - a.created_at || b.id.localeCompare(a.id));
+    const unresolved = new Set(missing);
+    for (const event of sorted) {
+      if (!unresolved.has(event.pubkey)) continue;
+      const profile = parseProfileEvent(event);
+      if (!profile) continue;
+      result[event.pubkey] = profile;
+      unresolved.delete(event.pubkey);
+      await this.cache?.setProfile(event.pubkey, profile);
+    }
+
+    // Fallback: fetch unresolved pubkeys individually to reduce "missing author" UI gaps.
+    if (unresolved.size > 0) {
+      await Promise.all(
+        Array.from(unresolved).map(async (pubkey) => {
+          const fallback = await this.safeQuerySync({ kinds: [0], authors: [pubkey], limit: 5 });
+          const latest = (fallback as NostrEvent[])
+            .slice()
+            .sort((a, b) => b.created_at - a.created_at || b.id.localeCompare(a.id))
+            .find((event) => Boolean(parseProfileEvent(event)));
+          if (!latest) return;
+          const profile = parseProfileEvent(latest);
+          if (!profile) return;
+          result[pubkey] = profile;
+          await this.cache?.setProfile(pubkey, profile);
+        })
+      );
+    }
     return result;
   }
 

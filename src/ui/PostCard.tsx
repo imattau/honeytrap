@@ -3,7 +3,7 @@ import { Radio, Bolt, Link2, ShieldCheck, Sparkles, UserCircle, UserPlus, UserCh
 import type { NostrEvent, ProfileMetadata } from '../nostr/types';
 import { extractMedia, type MediaSource } from '../nostr/media';
 import { extractLinks, type LinkPreviewSource } from '../nostr/links';
-import { parseLongFormTags } from '../nostr/utils';
+import { extractEmojiMap, parseLongFormTags, stripInvisibleSeparators, tokenizeLineWithEmojiAndHashtags } from '../nostr/utils';
 import { useAppState } from './AppState';
 import { useNavigate } from 'react-router-dom';
 import { flushSync } from 'react-dom';
@@ -74,6 +74,7 @@ export const PostCard = React.memo(function PostCard({
   const navigate = useNavigate();
   const media = useMemo(() => extractMedia(event), [event]);
   const links = useMemo(() => extractLinks(event), [event]);
+  const emojiMap = useMemo(() => extractEmojiMap(event.tags), [event.tags]);
   const isLongForm = event.kind === 30023;
   const longForm = useMemo(() => (isLongForm ? parseLongFormTags(event.tags) : undefined), [event.tags, isLongForm]);
   const nsfwAuthor = isNsfwAuthor(event.pubkey);
@@ -98,13 +99,17 @@ export const PostCard = React.memo(function PostCard({
   }, []);
 
   const renderContent = () => {
-    const cleaned = stripMediaUrls(event.content, media.map((item) => item.url));
+    const cleaned = stripInvisibleSeparators(stripMediaUrls(event.content, media.map((item) => item.url)));
     const parts = splitNostrContent(cleaned);
     return parts.map((part, index) => {
       if (part.type === 'text') {
-        return <React.Fragment key={`t-${index}`}>{renderTextWithBreaks(part.value, (tag) => {
-          flushSync(() => navigate(`/tag/${encodeURIComponent(tag)}`));
-        })}</React.Fragment>;
+        return (
+          <React.Fragment key={`t-${index}`}>
+            {renderTextWithBreaks(part.value, (tag) => {
+              flushSync(() => navigate(`/tag/${encodeURIComponent(tag)}`));
+            }, emojiMap)}
+          </React.Fragment>
+        );
       }
       const decoded = decodeNostrUri(part.value);
       if (!decoded) return <span key={`u-${index}`}>{part.value}</span>;
@@ -440,31 +445,40 @@ export const PostCard = React.memo(function PostCard({
   );
 });
 
-function renderTextWithBreaks(text: string, onTagClick: (tag: string) => void) {
+function renderTextWithBreaks(text: string, onTagClick: (tag: string) => void, emojiMap: Record<string, string>) {
   return text.split('\n').map((line, idx, arr) => (
     <React.Fragment key={`l-${idx}`}>
-      {renderLineWithHashtags(line, onTagClick)}
+      {renderLineWithHashtags(line, onTagClick, emojiMap)}
       {idx < arr.length - 1 && <br />}
     </React.Fragment>
   ));
 }
 
-function renderLineWithHashtags(line: string, onTagClick: (tag: string) => void) {
-  const regex = /(^|\s)#([a-zA-Z0-9_]+)/g;
+function renderLineWithHashtags(line: string, onTagClick: (tag: string) => void, emojiMap: Record<string, string>) {
+  const tokens = tokenizeLineWithEmojiAndHashtags(line, emojiMap);
   const parts: React.ReactNode[] = [];
-  let lastIndex = 0;
-  let match: RegExpExecArray | null;
-  while ((match = regex.exec(line)) !== null) {
-    const prefix = match[1] ?? '';
-    const start = match.index;
-    const textEnd = start + prefix.length;
-    if (textEnd > lastIndex) {
-      parts.push(line.slice(lastIndex, textEnd));
+  tokens.forEach((token, index) => {
+    if (token.type === 'text') {
+      parts.push(token.value);
+      return;
     }
-    const tag = match[2];
+    if (token.type === 'emoji') {
+      parts.push(
+        <img
+          key={`emoji-${index}`}
+          className="post-custom-emoji"
+          src={token.url}
+          alt={`:${token.value}:`}
+          loading="lazy"
+          decoding="async"
+        />
+      );
+      return;
+    }
+    const tag = token.value;
     parts.push(
       <button
-        key={`tag-${start}`}
+        key={`tag-${index}`}
         className="hashtag-link"
         onClick={(event) => {
           event.stopPropagation();
@@ -474,11 +488,7 @@ function renderLineWithHashtags(line: string, onTagClick: (tag: string) => void)
         #{tag}
       </button>
     );
-    lastIndex = start + prefix.length + 1 + tag.length;
-  }
-  if (lastIndex < line.length) {
-    parts.push(line.slice(lastIndex));
-  }
+  });
   return parts;
 }
 

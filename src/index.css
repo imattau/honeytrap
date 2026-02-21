@@ -440,6 +440,15 @@ body {
   cursor: pointer;
 }
 
+.post-custom-emoji {
+  width: 1.35em;
+  height: 1.35em;
+  margin: 0 0.08em;
+  vertical-align: -0.28em;
+  object-fit: contain;
+  border-radius: 4px;
+}
+
 .nested-card {
   border: 1px solid #1b222c;
   border-radius: 16px;

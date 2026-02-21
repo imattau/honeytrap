@@ -133,3 +133,62 @@ describe('NostrClient.fetchReplies', () => {
     expect(setEvents).toHaveBeenCalledOnce();
   });
 });
+
+describe('NostrClient.fetchProfiles', () => {
+  function profileEvent(pubkey: string, createdAt: number, profile: Record<string, unknown>): NostrEvent {
+    return {
+      id: `${pubkey.slice(0, 8)}-${createdAt}`,
+      pubkey,
+      created_at: createdAt,
+      kind: 0,
+      tags: [],
+      content: JSON.stringify(profile),
+      sig: 'a'.repeat(128)
+    };
+  }
+
+  it('keeps the newest profile when relay returns out-of-order metadata events', async () => {
+    const client = new NostrClient();
+    const alice = 'a'.repeat(64);
+    const setProfile = vi.fn(async () => undefined);
+    (client as any).cache = {
+      getProfile: vi.fn(async () => undefined),
+      setProfile
+    };
+    (client as any).safeQuerySync = vi.fn(async () => [
+      profileEvent(alice, 100, { name: 'Alice Old', picture: 'https://cdn.example/old.png' }),
+      profileEvent(alice, 200, { name: 'Alice New', picture: 'https://cdn.example/new.png' })
+    ]);
+
+    const profiles = await client.fetchProfiles([alice]);
+
+    expect(profiles[alice]).toEqual({ name: 'Alice New', picture: 'https://cdn.example/new.png' });
+    expect(setProfile).toHaveBeenCalledWith(alice, { name: 'Alice New', picture: 'https://cdn.example/new.png' });
+  });
+
+  it('falls back to per-author profile queries when batch query misses authors', async () => {
+    const client = new NostrClient();
+    const alice = 'a'.repeat(64);
+    const bob = 'b'.repeat(64);
+    const setProfile = vi.fn(async () => undefined);
+    (client as any).cache = {
+      getProfile: vi.fn(async () => undefined),
+      setProfile
+    };
+    const safeQuerySync = vi
+      .fn()
+      .mockResolvedValueOnce([profileEvent(alice, 100, { name: 'Alice' })])
+      .mockResolvedValueOnce([profileEvent(bob, 110, { name: 'Bob' })]);
+    (client as any).safeQuerySync = safeQuerySync;
+
+    const profiles = await client.fetchProfiles([alice, bob]);
+
+    expect(profiles[alice]?.name).toBe('Alice');
+    expect(profiles[bob]?.name).toBe('Bob');
+    expect(safeQuerySync).toHaveBeenCalledTimes(2);
+    expect(safeQuerySync).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ kinds: [0], authors: [bob], limit: 5 })
+    );
+  });
+});

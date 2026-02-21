@@ -29,7 +29,8 @@ export function AuthorView() {
     settings,
     attachMedia,
     fetchFollowersFor,
-    fetchFollowingFor
+    fetchFollowingFor,
+    mergeProfiles
   } = useAppState();
   const [events, setEvents] = useState<NostrEvent[]>([]);
   const [profile, setProfile] = useState<ProfileMetadata | undefined>(undefined);
@@ -76,7 +77,10 @@ export function AuthorView() {
         setEvents(next);
         if (next.length > 0) setLoading(false);
       },
-      () => null
+      (incoming) => {
+        if (!active) return;
+        mergeProfiles(incoming);
+      }
     );
     authorService.loadProfile(resolvedPubkey)
       .then((loaded) => {
@@ -104,7 +108,7 @@ export function AuthorView() {
       setEvents([]);
       setLoading(true);
     };
-  }, [authorService, fetchFollowersFor, fetchFollowingFor, resolvedPubkey]);
+  }, [authorService, fetchFollowersFor, fetchFollowingFor, mergeProfiles, resolvedPubkey]);
 
   const displayProfile = useMemo(() => profiles[resolvedPubkey] ?? profile, [profiles, profile, resolvedPubkey]);
   const fallbackAvatar = '/assets/honeytrap_logo_256.png';
