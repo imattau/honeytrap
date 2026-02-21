@@ -442,7 +442,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   }, [setProfiles]);
 
   const hydrateProfiles = useCallback(async (pubkeys: string[]) => {
-    const unique = Array.from(new Set(pubkeys.map((pubkey) => pubkey.trim().toLowerCase()).filter(Boolean)));
+    const unique = Array.from(new Set(pubkeys.map((pubkey) => pubkey.trim()).filter(Boolean)));
     if (unique.length === 0) return;
     const now = Date.now();
     const missing = unique.filter(
@@ -459,7 +459,10 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     try {
       const fetched = await nostr.fetchProfiles(missing);
       mergeProfiles(fetched);
-      Object.keys(fetched).forEach((pubkey) => profileHydrationAttemptRef.current.delete(pubkey.toLowerCase()));
+      Object.keys(fetched).forEach((pubkey) => profileHydrationAttemptRef.current.delete(pubkey));
+      // Clear retry gate for pubkeys the relay did NOT return so they can be retried sooner
+      const failedPubkeys = missing.filter((pk) => !fetched?.[pk]);
+      failedPubkeys.forEach((pk) => profileHydrationAttemptRef.current.delete(pk));
     } finally {
       missing.forEach((pubkey) => profileHydrationInflightRef.current.delete(pubkey));
     }

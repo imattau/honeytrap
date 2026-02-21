@@ -28,7 +28,7 @@ export class MagnetBuilder {
     if (!this.hub?.getClient() || !this.settings.enabled) return {};
     const canonical = canonicaliseEvent(event);
     const sha256 = await sha256Hex(canonical);
-    const magnet = await this.seedBytes('event.json', canonical);
+    const magnet = await this.seedBytes('event.json', canonical, { eventId: event.id, authorPubkey: event.pubkey });
     return { magnet, sha256 };
   }
 
@@ -54,7 +54,7 @@ export class MagnetBuilder {
     return { magnet, sha256 };
   }
 
-  private async seedBytes(name: string, data: ArrayBuffer | Uint8Array): Promise<string | undefined> {
+  private async seedBytes(name: string, data: ArrayBuffer | Uint8Array, meta?: { eventId?: string; authorPubkey?: string; availableUntil?: number }): Promise<string | undefined> {
     if (!this.hub?.getClient()) return undefined;
     try {
       const bytes = data instanceof Uint8Array ? data : new Uint8Array(data);

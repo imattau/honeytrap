@@ -218,6 +218,7 @@ export class FeedOrchestrator implements FeedOrchestratorApi {
           let changed = false;
           for (const [pubkey, profile] of Object.entries(fetched)) {
             this.profiles = { ...this.profiles, [pubkey]: profile };
+            this.cache?.setProfile(pubkey, profile).catch(() => null);
             changed = true;
           }
           if (changed) onProfiles(this.profiles);
@@ -236,8 +237,9 @@ export class FeedOrchestrator implements FeedOrchestratorApi {
         .finally(() => {
           toFetch.forEach((pubkey) => this.profileInflight.delete(pubkey));
           // Schedule the next batch only after this one is complete.
-          if (this.profileQueue.size > 0) {
-            this.drainProfiles(onProfiles);
+          // Use lastOnProfiles so we always use the current callback, not a stale captured param.
+          if (this.profileQueue.size > 0 && this.lastOnProfiles) {
+            this.drainProfiles(this.lastOnProfiles);
           }
         });
     };

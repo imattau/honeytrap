@@ -106,22 +106,27 @@ export function useP2PState({
       Object.values(snapshot).forEach((item) => {
         if (item.availableUntil && now > item.availableUntil) return;
         if (item.mode === 'seed') {
-          webtorrentHub.ensure(item.magnet, (torrent) => {
-            torrentRegistry.update(item.magnet, { name: torrent.name });
-            const update = () => torrentRegistry.update(item.magnet, {
-              peers: torrent.numPeers,
-              progress: torrent.progress,
-              downloaded: torrent.downloaded,
-              uploaded: torrent.uploaded
+          torrentRegistry.start({ magnet: item.magnet, mode: 'seed', name: item.name, eventId: item.eventId, authorPubkey: item.authorPubkey, availableUntil: item.availableUntil });
+          try {
+            webtorrentHub.ensure(item.magnet, (torrent) => {
+              torrentRegistry.update(item.magnet, { name: torrent.name });
+              const update = () => torrentRegistry.update(item.magnet, {
+                peers: torrent.numPeers,
+                progress: torrent.progress,
+                downloaded: torrent.downloaded,
+                uploaded: torrent.uploaded
+              });
+              torrent.on('download', update);
+              torrent.on('upload', update);
+              torrent.on('wire', update);
+              torrent.on('noPeers', update);
+              torrent.on('done', update);
+              torrent.on('error', () => torrentRegistry.finish(item.magnet));
+              torrent.on('close', () => torrentRegistry.finish(item.magnet));
             });
-            torrent.on('download', update);
-            torrent.on('upload', update);
-            torrent.on('wire', update);
-            torrent.on('noPeers', update);
-            torrent.on('done', update);
-            torrent.on('error', () => torrentRegistry.finish(item.magnet));
-            torrent.on('close', () => torrentRegistry.finish(item.magnet));
-          });
+          } catch {
+            // WebTorrent client not ready; skip this torrent for now
+          }
         } else if (item.url?.startsWith('http')) {
           const source: AssistSource = {
             url: item.url,
