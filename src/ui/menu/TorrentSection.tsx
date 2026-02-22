@@ -120,6 +120,15 @@ export function TorrentSection({ value, onChange, onSave, saved }: TorrentSectio
           onChange={(event) => onChange({ trackers: event.target.value.split(/\n|,/).map((t) => t.trim()).filter(Boolean) })}
         />
       </div>
+      <div className="menu-row">
+        <label className="menu-label">ICE / STUN servers</label>
+        <textarea
+          className="menu-textarea"
+          rows={3}
+          value={(value.iceServers ?? []).join('\n')}
+          onChange={(event) => onChange({ iceServers: event.target.value.split(/\n|,/).map((s) => s.trim()).filter(Boolean) })}
+        />
+      </div>
       {!canEncryptNip44 && (
         <div className="menu-sub">
           Encrypted torrent list is best-effort. Remote signer support is planned.

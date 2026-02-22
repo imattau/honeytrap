@@ -36,6 +36,11 @@ export const defaultSettings: AppSettings = {
     trackers: [
       'wss://tracker.openwebtorrent.com',
       'wss://tracker.btorrent.xyz'
+    ],
+    iceServers: [
+      'stun:stun.l.google.com:19302',
+      'stun:stun1.l.google.com:19302',
+      'stun:global.stun.twilio.com:3478'
     ]
   },
   p2pUpdatedAt: 0

@@ -41,12 +41,13 @@ export class WebTorrentHub {
 
   seed(file: File, onSeed: (torrent: Torrent) => void): Torrent {
     if (!this.client) throw new Error('WebTorrent disabled');
-    return this.client.seed(file, onSeed);
+    return this.client.seed(file, { announce: this.settings.trackers }, onSeed);
   }
 
   add(magnet: string, onAdd: (torrent: Torrent) => void, opts?: Record<string, unknown>): Torrent {
     if (!this.client) throw new Error('WebTorrent disabled');
-    return this.client.add(magnet, opts ?? {}, onAdd);
+    const mergedOpts = { announce: this.settings.trackers, ...opts };
+    return this.client.add(magnet, mergedOpts, onAdd);
   }
 
   ensure(magnet: string, onAdd: (torrent: Torrent) => void, opts?: Record<string, unknown>): Torrent {
@@ -56,14 +57,21 @@ export class WebTorrentHub {
       onAdd(existing);
       return existing;
     }
-    return this.client.add(magnet, opts ?? {}, onAdd);
+    const mergedOpts = { announce: this.settings.trackers, ...opts };
+    return this.client.add(magnet, mergedOpts, onAdd);
   }
 
   private createClient(settings: P2PSettings, existing?: WebTorrent) {
     existing?.destroy();
+    const rawIceServers = settings.iceServers?.length
+      ? settings.iceServers
+      : ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302', 'stun:global.stun.twilio.com:3478'];
     return new WebTorrent({
       tracker: {
-        announce: settings.trackers
+        announce: settings.trackers,
+        rtcConfig: {
+          iceServers: rawIceServers.map((url) => ({ urls: url }))
+        }
       }
     });
   }

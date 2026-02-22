@@ -23,6 +23,7 @@ declare module 'webtorrent' {
     constructor(opts?: any);
     add(magnet: string, opts: any, cb: (torrent: Torrent) => void): Torrent;
     add(magnet: string, cb: (torrent: Torrent) => void): Torrent;
+    seed(file: File | Blob | ArrayBuffer | Uint8Array, opts: any, cb: (torrent: Torrent) => void): Torrent;
     seed(file: File | Blob | ArrayBuffer | Uint8Array, cb: (torrent: Torrent) => void): Torrent;
     get(magnet: string): Torrent | undefined;
     destroy(): void;

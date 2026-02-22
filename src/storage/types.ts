@@ -11,6 +11,7 @@ export interface P2PSettings {
   seedRelayEvents: boolean;
   publishSeedingList: boolean;
   trackers: string[];
+  iceServers: string[];
 }
 
 export interface RelayStatus {
