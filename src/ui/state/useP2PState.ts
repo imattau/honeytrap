@@ -42,7 +42,7 @@ export function useP2PState({
   const DISCOVERED_AUTHOR_TTL_MS = 24 * 60 * 60 * 1000;
   const MAX_SEEDING_AUTHORS_PER_SCAN = 20;
   const MAX_HINTS_PER_AUTHOR = 8;
-  const AUTOJOIN_COOLDOWN_MS = 15 * 60 * 1000;
+  const AUTOJOIN_COOLDOWN_MS = 5 * 60 * 1000;
   const AUTOJOIN_ABSOLUTE_MAX = 80;
 
   const [torrentSnapshot, setTorrentSnapshot] = useState<TorrentSnapshot>({});

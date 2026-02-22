@@ -14,14 +14,22 @@ export class TorrentSyncService {
   async hydrate(pubkey: string, onItems: (snapshot: TorrentSnapshot) => void) {
     if (this.hydratedForPubkey === pubkey) return;
     const requestId = ++this.hydrateRequestId;
-    const items = await this.listService.load(pubkey);
-    if (requestId !== this.hydrateRequestId) return;
-    const snapshot: TorrentSnapshot = {};
-    items.forEach((item) => {
-      snapshot[item.magnet] = item;
-    });
-    onItems(snapshot);
-    this.hydratedForPubkey = pubkey;
+    try {
+      const items = await this.listService.load(pubkey);
+      if (requestId !== this.hydrateRequestId) return;
+      const snapshot: TorrentSnapshot = {};
+      items.forEach((item) => {
+        snapshot[item.magnet] = item;
+      });
+      onItems(snapshot);
+    } finally {
+      // Always mark as hydrated so schedulePublish is unblocked,
+      // even when load() throws (network error, relay timeout, decrypt failure).
+      // Skip if a newer hydrate request superseded this one.
+      if (requestId === this.hydrateRequestId) {
+        this.hydratedForPubkey = pubkey;
+      }
+    }
   }
 
   schedulePublish(pubkey: string, snapshot: TorrentSnapshot) {
@@ -39,7 +47,7 @@ export class TorrentSyncService {
       if (this.hydratedForPubkey !== pubkey) return;
       this.listService.publish(items).catch(() => null);
       this.publishPublic?.(items).catch(() => null);
-    }, 10_000);
+    }, 3_000);
   }
 
   reset() {
