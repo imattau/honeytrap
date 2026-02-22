@@ -608,6 +608,7 @@
   .menu-section {
     @apply grid gap-2.5 py-3;
     border-bottom: 1px solid #1b222c;
+    min-width: 0;
   }
 
   .menu-section summary {
@@ -633,18 +634,25 @@
 
   .menu-section-body {
     @apply grid gap-2.5;
+    min-width: 0;
   }
 
   .menu-label {
     @apply text-xs text-[#b4c0d4] inline-flex items-center gap-1.5;
+    min-width: 0;
+    overflow-wrap: anywhere;
   }
 
   .menu-sub {
     @apply text-xs text-[#8b9bb4];
+    min-width: 0;
+    overflow-wrap: anywhere;
   }
 
   .menu-row {
     @apply flex flex-wrap gap-2 items-center;
+    min-width: 0;
+    align-items: flex-start;
   }
 
   .menu-pill-row {
@@ -702,10 +710,13 @@
 
   .menu-toggle-row {
     @apply grid gap-2;
+    min-width: 0;
   }
 
   .menu-toggle {
     @apply inline-flex items-center gap-2 text-xs text-[#cdd7e4];
+    min-width: 0;
+    overflow-wrap: anywhere;
   }
 
   .menu-button {
@@ -725,15 +736,18 @@
 
   .torrent-list {
     @apply grid gap-2;
+    min-width: 0;
   }
 
   .torrent-list-items {
     @apply grid gap-2;
+    min-width: 0;
   }
 
   .torrent-item {
     @apply border border-[#1b222c] rounded-xl p-2 px-2.5;
     background-color: rgba(11, 13, 16, 0.55);
+    min-width: 0;
   }
 
   .torrent-item.inactive {
@@ -742,14 +756,16 @@
 
   .torrent-item-row {
     @apply flex items-center gap-2 min-w-0;
+    overflow: hidden;
   }
 
   .torrent-name {
-    @apply text-xs text-[#d6e0f0] truncate;
+    @apply text-xs text-[#d6e0f0] truncate flex-1 min-w-0;
   }
 
   .torrent-meta {
-    @apply flex gap-2.5 text-[11px] text-[#8b9bb4] mt-1 items-center;
+    @apply flex flex-wrap gap-2.5 text-[11px] text-[#8b9bb4] mt-1 items-center;
+    min-width: 0;
   }
 
   .torrent-chip {
