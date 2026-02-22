@@ -163,9 +163,23 @@ export class NostrClient implements NostrClientApi {
   async fetchReplies(eventId: string): Promise<NostrEvent[]> {
     const cached = await this.cache?.getReplies(eventId);
     // Always refresh from relay so thread views don't get stuck on a stale empty cache.
-    const events = await this.safeQuerySync({ kinds: [1], '#e': [eventId], limit: 150 });
+    // Fetch limit is 300 to compensate for post-fetch filtering to direct replies only.
+    const events = await this.safeQuerySync({ kinds: [1], '#e': [eventId], limit: 300 });
     const fresh = events as NostrEvent[];
-    const merged = dedupeEventsById([...(cached ?? []), ...fresh]);
+    // NIP-10: filter to direct replies only — the #e filter over-matches, returning
+    // events where eventId appears as a root ref or mention rather than a direct parent.
+    const direct = fresh.filter((ev) => {
+      const eTags = ev.tags.filter((t) => t[0] === 'e');
+      // NIP-10: explicit reply marker
+      if (eTags.some((t) => t[1] === eventId && t[3] === 'reply')) return true;
+      // NIP-10: positional — last e tag is parent (if no markers used)
+      const hasMarkers = eTags.some((t) => t[3] === 'root' || t[3] === 'reply');
+      if (!hasMarkers && eTags.length > 0 && eTags[eTags.length - 1][1] === eventId) return true;
+      // Single e tag, no markers — treat as direct reply
+      if (eTags.length === 1 && eTags[0][1] === eventId) return true;
+      return false;
+    });
+    const merged = dedupeEventsById([...(cached ?? []), ...direct]);
     if (merged.length > 0) {
       await this.cache?.setReplies(eventId, merged);
       await this.cache?.setEvents(merged);
@@ -353,6 +367,10 @@ export class NostrClient implements NostrClientApi {
   }
 
   private async safeQuerySync(filter: Filter): Promise<NostrEvent[]> {
+    // Guard: if no relays are configured yet, skip the query rather than
+    // wasting a query slot. Callers such as fetchEventById will simply return
+    // undefined/[] and the UI will show its fallback state.
+    if (this.relays.length === 0) return [];
     return this.queryLimit(async () => {
       try {
         const events = await this.pool.querySync(this.relays, filter);

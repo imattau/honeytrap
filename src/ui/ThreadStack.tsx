@@ -31,7 +31,7 @@ export function ThreadStack() {
   const [nodes, setNodes] = useState<ThreadNode[]>(
     () => (initialFallback ? [{ event: initialFallback, depth: 0, role: 'target' }] : [])
   );
-  const [loading, setLoading] = useState(() => !initialFallback);
+  const [loading, setLoading] = useState(true);
   const [touchStart, setTouchStart] = useState<number | null>(null);
   const [composerOpen, setComposerOpen] = useState(false);
   const [replyTarget, setReplyTarget] = useState<NostrEvent | undefined>(undefined);
@@ -50,24 +50,27 @@ export function ThreadStack() {
     if (fallback) {
       setNodes([{ event: fallback, depth: 0, role: 'target' }]);
       hydrateProfiles([fallback.pubkey]).catch(() => null);
-      setLoading(false);
+      // Do NOT setLoading(false) here — keep the loading indicator active
+      // until the full thread resolves via loadThread below.
     } else {
       setNodes([]);
-      setLoading(true);
     }
+    setLoading(true);
     loadThread(id)
       .then((loaded) => {
         if (!active) return;
         if (loaded.length > 0) {
           setNodes(loaded);
           hydrateProfiles(loaded.map((node) => node.event.pubkey)).catch(() => null);
-          setLoading(false);
           return;
         }
         setNodes(fallback ? [{ event: fallback, depth: 0, role: 'target' }] : []);
-        setLoading(false);
       })
       .catch(() => {
+        if (!active) return;
+        if (!fallback) setNodes([]);
+      })
+      .finally(() => {
         if (!active) return;
         setLoading(false);
       });

@@ -77,7 +77,10 @@ export class ThreadService implements ThreadServiceApi {
     // only for any gaps not covered by the e-tags.
     const chain: NostrEvent[] = [];
     let current: NostrEvent | undefined = event;
-    while (current) {
+    let depth = 0;
+    const MAX_ANCESTOR_DEPTH = 50;
+    while (current && depth < MAX_ANCESTOR_DEPTH) {
+      depth++;
       chain.unshift(current);
       const parentId = getReplyParentId(current);
       if (!parentId) break;
