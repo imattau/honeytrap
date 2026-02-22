@@ -31,10 +31,12 @@ export interface LongFormMetadata {
 
 export interface ListDescriptor {
   id: string;
+  identifier?: string;
   title: string;
   description?: string;
   pubkeys: string[];
   kind: number;
+  createdAt: number;
 }
 
 export interface TrackItem {

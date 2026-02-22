@@ -107,6 +107,76 @@ describe('NostrClient.publishEvent', () => {
   });
 });
 
+describe('NostrClient.fetchLists', () => {
+  function listEvent(input: {
+    id: string;
+    createdAt: number;
+    kind?: number;
+    d?: string;
+    title?: string;
+    description?: string;
+    pubkeys?: string[];
+  }): NostrEvent {
+    const tags: string[][] = [];
+    if (input.d) tags.push(['d', input.d]);
+    if (input.title) tags.push(['title', input.title]);
+    if (input.description) tags.push(['description', input.description]);
+    (input.pubkeys ?? []).forEach((pubkey) => tags.push(['p', pubkey]));
+    return {
+      id: input.id,
+      pubkey: 'f'.repeat(64),
+      created_at: input.createdAt,
+      kind: input.kind ?? 30000,
+      tags,
+      content: '',
+      sig: 'a'.repeat(128)
+    };
+  }
+
+  it('dedupes addressable lists by kind + identifier and keeps newest', async () => {
+    const client = new NostrClient();
+    (client as any).safeQuerySync = vi.fn(async () => [
+      listEvent({
+        id: 'old-list-event',
+        createdAt: 100,
+        d: 'friends',
+        title: 'Friends (old)',
+        description: 'old desc',
+        pubkeys: ['a'.repeat(64)]
+      }),
+      listEvent({
+        id: 'new-list-event',
+        createdAt: 200,
+        d: 'friends',
+        title: 'Friends',
+        description: 'new desc',
+        pubkeys: ['a'.repeat(64), 'b'.repeat(64)]
+      }),
+      listEvent({
+        id: 'work-list-event',
+        createdAt: 150,
+        d: 'work',
+        title: 'Work',
+        pubkeys: ['c'.repeat(64)]
+      })
+    ]);
+
+    const lists = await client.fetchLists('f'.repeat(64));
+
+    expect(lists).toHaveLength(2);
+    const friends = lists.find((list) => list.identifier === 'friends');
+    expect(friends).toMatchObject({
+      id: 'new-list-event',
+      identifier: 'friends',
+      title: 'Friends',
+      description: 'new desc',
+      kind: 30000,
+      createdAt: 200
+    });
+    expect(friends?.pubkeys).toEqual(['a'.repeat(64), 'b'.repeat(64)]);
+  });
+});
+
 describe('NostrClient.fetchReplies', () => {
   it('refreshes replies from relay even when cache has stale empty list', async () => {
     const client = new NostrClient();
@@ -128,7 +198,7 @@ describe('NostrClient.fetchReplies', () => {
     const replies = await client.fetchReplies('root-id');
 
     expect(replies.map((item) => item.id)).toEqual(['reply-1']);
-    expect((client as any).safeQuerySync).toHaveBeenCalledWith({ kinds: [1], '#e': ['root-id'], limit: 150 });
+    expect((client as any).safeQuerySync).toHaveBeenCalledWith({ kinds: [1], '#e': ['root-id'], limit: 300 });
     expect(setReplies).toHaveBeenCalledOnce();
     expect(setEvents).toHaveBeenCalledOnce();
   });
@@ -277,5 +347,53 @@ describe('NostrClient.fetchProfiles', () => {
     const profiles = await client.fetchProfiles([alice]);
 
     expect(profiles[alice]).toBeUndefined();
+  });
+});
+
+describe('NostrClient.fetchMentions', () => {
+  function mentionEvent(id: string, createdAt: number): NostrEvent {
+    return {
+      id,
+      pubkey: 'f'.repeat(64),
+      created_at: createdAt,
+      kind: 1,
+      tags: [['p', 'a'.repeat(64)]],
+      content: 'hello',
+      sig: 'a'.repeat(128)
+    };
+  }
+
+  it('writes latest mentions snapshot to cache on initial page fetch', async () => {
+    const client = new NostrClient();
+    const setEvents = vi.fn(async () => undefined);
+    const setMentions = vi.fn(async () => undefined);
+    (client as any).cache = { setEvents, setMentions };
+    (client as any).safeQuerySync = vi.fn(async () => [
+      mentionEvent('older', 10),
+      mentionEvent('newer', 20)
+    ]);
+
+    const result = await client.fetchMentions('a'.repeat(64), { limit: 50 });
+
+    expect(result.map((event) => event.id)).toEqual(['newer', 'older']);
+    expect(setEvents).toHaveBeenCalledOnce();
+    expect(setMentions).toHaveBeenCalledOnce();
+    expect(setMentions).toHaveBeenCalledWith('a'.repeat(64), expect.arrayContaining([
+      expect.objectContaining({ id: 'newer' }),
+      expect.objectContaining({ id: 'older' })
+    ]));
+  });
+
+  it('does not overwrite latest mentions snapshot on paginated older fetch', async () => {
+    const client = new NostrClient();
+    const setEvents = vi.fn(async () => undefined);
+    const setMentions = vi.fn(async () => undefined);
+    (client as any).cache = { setEvents, setMentions };
+    (client as any).safeQuerySync = vi.fn(async () => [mentionEvent('old', 5)]);
+
+    await client.fetchMentions('a'.repeat(64), { until: 9, limit: 20 });
+
+    expect(setEvents).toHaveBeenCalledOnce();
+    expect(setMentions).not.toHaveBeenCalled();
   });
 });

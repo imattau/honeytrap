@@ -48,7 +48,7 @@ interface FeedContextValue {
   fetchMentions: (pubkey: string, input?: { until?: number; limit?: number }) => Promise<NostrEvent[]>;
   subscribeMentions: (pubkey: string, onEvent: (event: NostrEvent) => void, onClose?: (reasons: string[]) => void) => Promise<() => void>;
   fetchLists: (pubkey: string) => Promise<ListDescriptor[]>;
-  publishPeopleList: (input: { title: string; description?: string; pubkeys: string[]; kind?: number }) => Promise<void>;
+  publishPeopleList: (input: { title: string; description?: string; pubkeys: string[]; identifier?: string; kind?: number }) => Promise<void>;
   mergeProfiles: (profiles: Record<string, ProfileMetadata>) => void;
   hydrateProfiles: (pubkeys: string[]) => Promise<void>;
   authorService: AuthorService;

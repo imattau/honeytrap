@@ -4,6 +4,7 @@ import { EventStore } from '../storage/eventStore';
 
 const TTL_PROFILE = 6 * 60 * 60 * 1000;
 const TTL_EVENT = 60 * 60 * 1000;
+const TTL_MENTIONS = 10 * 60 * 1000;
 const TTL_REPLIES = 5 * 60 * 1000;
 const TTL_FOLLOWERS = 10 * 60 * 1000;
 const TTL_FOLLOWING = 10 * 60 * 1000;
@@ -15,6 +16,7 @@ import type { NostrCacheApi } from './contracts';
 export class NostrCache implements NostrCacheApi {
   private profiles = new CacheStore<ProfileMetadata>({ maxEntries: 800, evictionPolicy: 'lru', persistAccessMs: 20_000 });
   private events = new CacheStore<NostrEvent>({ maxEntries: 2000, evictionPolicy: 'lru', persistAccessMs: 20_000 });
+  private mentions = new CacheStore<NostrEvent[]>({ maxEntries: 120, evictionPolicy: 'lru', persistAccessMs: 20_000 });
   private replies = new CacheStore<NostrEvent[]>({ maxEntries: 400, evictionPolicy: 'lru', persistAccessMs: 20_000 });
   private followers = new CacheStore<string[]>({ maxEntries: 200, evictionPolicy: 'fifo' });
   private following = new CacheStore<string[]>({ maxEntries: 200, evictionPolicy: 'fifo' });
@@ -41,6 +43,15 @@ export class NostrCache implements NostrCacheApi {
 
   async setEvents(events: NostrEvent[]) {
     await Promise.all(events.map((event) => this.setEvent(event)));
+  }
+
+  async getMentions(pubkey: string) {
+    return this.mentions.get(`mentions:${pubkey}`);
+  }
+
+  async setMentions(pubkey: string, events: NostrEvent[]) {
+    await this.mentions.set(`mentions:${pubkey}`, events, TTL_MENTIONS);
+    await this.setEvents(events);
   }
 
   async getReplies(eventId: string) {
@@ -107,6 +118,7 @@ export class NostrCache implements NostrCacheApi {
     await Promise.all([
       this.profiles.purgeExpired(),
       this.events.purgeExpired(),
+      this.mentions.purgeExpired(),
       this.replies.purgeExpired(),
       this.followers.purgeExpired(),
       this.following.purgeExpired(),

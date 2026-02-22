@@ -4,6 +4,7 @@ import { Bell } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import type { NostrEvent } from '../nostr/types';
 import { useAppState } from './AppState';
+import { useNostr } from './state/contexts/NostrContext';
 import { PostCard } from './PostCard';
 import { openThread } from './threadNavigation';
 import { dedupeEvents } from './utils';
@@ -22,6 +23,7 @@ const FILTERS: Array<{ id: NotificationFilter; label: string }> = [
   { id: 'reactions', label: 'Reactions' },
   { id: 'zaps', label: 'Zaps' }
 ];
+const MENTIONS_CACHE_LIMIT = 120;
 const FILTER_EMPTY_LABEL: Record<NotificationFilter, string> = {
   all: 'notifications',
   mentions: 'mentions',
@@ -31,6 +33,7 @@ const FILTER_EMPTY_LABEL: Record<NotificationFilter, string> = {
 
 export function NotificationsView() {
   const { keys, profiles, fetchMentions, subscribeMentions, hydrateProfiles } = useAppState();
+  const { cache } = useNostr();
   const navigate = useNavigate();
   const [events, setEvents] = useState<NostrEvent[]>([]);
   const [loading, setLoading] = useState(true);
@@ -65,6 +68,17 @@ export function NotificationsView() {
     }
     let active = true;
     setLoading(true);
+    cache.getMentions(keys.npub)
+      .then((cached) => {
+        if (!active || !cached || cached.length === 0) return;
+        const sortedCached = dedupeEvents(cached).slice(0, MENTIONS_CACHE_LIMIT);
+        setEvents(sortedCached);
+        hydrateProfiles(sortedCached.map((event) => event.pubkey)).catch(() => null);
+        oldestRef.current = sortedCached[sortedCached.length - 1]?.created_at;
+        setLoading(false);
+      })
+      .catch(() => null);
+
     fetchMentions(keys.npub, { limit: 80 })
       .then((loaded) => {
         if (!active) return;
@@ -83,7 +97,11 @@ export function NotificationsView() {
       keys.npub,
       (event) => {
         if (!active) return;
-        setEvents((prev) => dedupeEvents([event, ...prev]));
+        setEvents((prev) => {
+          const merged = dedupeEvents([event, ...prev]);
+          cache.setMentions(keys.npub, merged.slice(0, MENTIONS_CACHE_LIMIT)).catch(() => null);
+          return merged;
+        });
         hydrateProfiles([event.pubkey]).catch(() => null);
       },
       () => null
@@ -95,7 +113,7 @@ export function NotificationsView() {
       active = false;
       unsubscribe?.();
     };
-  }, [fetchMentions, hydrateProfiles, keys?.npub, subscribeMentions]);
+  }, [cache, fetchMentions, hydrateProfiles, keys?.npub, subscribeMentions]);
 
   const summary = useMemo(
     () => summarizeNotifications(events, lastReadAt),
@@ -124,6 +142,7 @@ export function NotificationsView() {
       hydrateProfiles(older.map((event) => event.pubkey)).catch(() => null);
       setEvents((prev) => {
         const merged = dedupeEvents([...prev, ...older]);
+        cache.setMentions(keys.npub, merged.slice(0, MENTIONS_CACHE_LIMIT)).catch(() => null);
         oldestRef.current = merged[merged.length - 1]?.created_at;
         return merged;
       });

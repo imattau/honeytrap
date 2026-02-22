@@ -58,17 +58,19 @@ export class PeopleListService {
     title,
     description,
     pubkeys,
+    identifier,
     kind = 30000
   }: {
     title: string;
     description?: string;
     pubkeys: string[];
+    identifier?: string;
     kind?: number;
   }): Promise<NostrEvent> {
     const normalizedTitle = title.trim();
-    const identifier = normalizedTitle.toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '') || 'list';
+    const listIdentifier = identifier?.trim() || normalizeListIdentifier(normalizedTitle);
     const tags: NostrTag[] = [
-      ['d', identifier],
+      ['d', listIdentifier],
       ['title', normalizedTitle]
     ];
     if (description?.trim()) tags.push(['description', description.trim()]);
@@ -82,4 +84,8 @@ export class PeopleListService {
     await this.nostr.publishEvent(event);
     return event;
   }
+}
+
+function normalizeListIdentifier(title: string): string {
+  return title.toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '') || 'list';
 }

@@ -162,11 +162,30 @@ export class NostrClient implements NostrClientApi {
       kinds: [30000, 30001, 30002, 30003, 30004, 30005],
       authors: [pubkey]
     });
-    return (events as NostrEvent[]).map((event) => {
-      const title = getTagValue(event.tags, 'title') ?? getTagValue(event.tags, 'd') ?? 'Untitled';
+    const latestByList = new Map<string, NostrEvent>();
+    const sorted = (events as NostrEvent[])
+      .slice()
+      .sort((a, b) => b.created_at - a.created_at || b.id.localeCompare(a.id));
+    for (const event of sorted) {
+      const identifier = getTagValue(event.tags, 'd')?.trim();
+      const listKey = `${event.kind}:${identifier || event.id}`;
+      if (latestByList.has(listKey)) continue;
+      latestByList.set(listKey, event);
+    }
+    return Array.from(latestByList.values()).map((event) => {
+      const identifier = getTagValue(event.tags, 'd')?.trim();
+      const title = getTagValue(event.tags, 'title') ?? identifier ?? 'Untitled';
       const description = getTagValue(event.tags, 'description');
       const pubkeys = getAllTagValues(event.tags, 'p');
-      return { id: event.id, title, description, pubkeys, kind: event.kind };
+      return {
+        id: event.id,
+        identifier,
+        title,
+        description,
+        pubkeys,
+        kind: event.kind,
+        createdAt: event.created_at
+      };
     });
   }
 
@@ -350,6 +369,11 @@ export class NostrClient implements NostrClientApi {
       .slice()
       .sort((a, b) => b.created_at - a.created_at || b.id.localeCompare(a.id));
     await this.cache?.setEvents(sorted);
+    // Keep a dedicated "latest mentions" snapshot per user for cache-first
+    // notifications rendering on next app/view open.
+    if (!until) {
+      await this.cache?.setMentions(pubkey, sorted.slice(0, Math.max(limit, 120)));
+    }
     return sorted;
   }
 
