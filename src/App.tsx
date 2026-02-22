@@ -193,20 +193,24 @@ function Feed() {
       return {
         prefetchRemainingItems: 72,
         overscanPx: 2600,
-        viewportBy: { top: 1400, bottom: 4200 } as const
+        // Bottom extension reduced: pre-rendering too many off-screen cards
+        // causes them to render before their author profiles are available,
+        // producing a visible "no profile" flash. Keep top generous so
+        // scrolling back up is smooth; cap the bottom to ~2 screen-heights.
+        viewportBy: { top: 1400, bottom: 1800 } as const
       };
     }
     if (gridColumns === 2) {
       return {
         prefetchRemainingItems: 40,
         overscanPx: 2200,
-        viewportBy: { top: 1200, bottom: 3200 } as const
+        viewportBy: { top: 1200, bottom: 1600 } as const
       };
     }
     return {
       prefetchRemainingItems: 18,
       overscanPx: 1800,
-      viewportBy: { top: 1000, bottom: 2400 } as const
+      viewportBy: { top: 1000, bottom: 1400 } as const
     };
   }, [gridColumns]);
 
@@ -215,9 +219,11 @@ function Feed() {
     if (remaining <= virtualizationTuning.prefetchRemainingItems) loadOlderSafe();
   }, [events.length, virtualizationTuning.prefetchRemainingItems]);
 
-  const gridComponents = useMemo(() => ({
-    ScrollSeekPlaceholder: () => <div className="post-card post-card--placeholder" aria-hidden="true" />
-  }), []);
+  // No ScrollSeekPlaceholder: the placeholder rendered blank animated cards
+  // during fast scrolling. Removing it means Virtuoso renders real PostCards
+  // at all scroll speeds — cards may be skipped by the browser's compositing
+  // during the fastest flicks, but users never see blank shimmer boxes.
+  const gridComponents = useMemo(() => ({}), []);
 
   return (
     <div
@@ -315,10 +321,6 @@ function Feed() {
           increaseViewportBy={virtualizationTuning.viewportBy}
           rangeChanged={handleRangeChanged}
           endReached={() => loadOlderSafe()}
-          scrollSeekConfiguration={{
-            enter: (velocity) => Math.abs(velocity) > 200,
-            exit: (velocity) => Math.abs(velocity) < 30,
-          }}
           itemContent={itemContentRenderer}
         />
       )}

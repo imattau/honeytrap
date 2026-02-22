@@ -83,6 +83,10 @@ export const PostCard = React.memo(function PostCard({
   const [menuPos, setMenuPos] = useState<{ x: number; y: number } | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const touchPressTimerRef = useRef<number | null>(null);
+  // Track the last pubkey we requested hydration for so we only fire once per
+  // card mount (not on every re-render). Calling hydrateProfiles during render
+  // (instead of in useEffect) starts the fetch before the first paint.
+  const hydratedPubkeyRef = useRef<string | null>(null);
   const navigate = useNavigate();
 
   const media = useMemo(() => extractMedia(event), [event]);
@@ -111,10 +115,12 @@ export const PostCard = React.memo(function PostCard({
     };
   }, []);
 
-  useEffect(() => {
-    if (authorProfile) return;
+  // Fire profile hydration during render (before paint) rather than in a
+  // useEffect (after paint). The ref guards against re-firing on every render.
+  if (!authorProfile && hydratedPubkeyRef.current !== event.pubkey) {
+    hydratedPubkeyRef.current = event.pubkey;
     hydrateProfiles([event.pubkey]).catch(() => null);
-  }, [authorProfile, event.pubkey, hydrateProfiles]);
+  }
 
   const transportStatus = useTransportStatus(transportStore, event.id);
   const followed = isFollowed(event.pubkey);
