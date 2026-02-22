@@ -1,5 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { X, Zap } from 'lucide-react';
+import { Button } from './Button';
+import { FormGroup } from './FormGroup';
 
 interface ZapComposerProps {
   open: boolean;
@@ -50,41 +52,53 @@ export function ZapComposer({ open, presets, onClose, onSend }: ZapComposerProps
   return (
     <div className="zap-backdrop">
       <div className="zap-panel">
-        <div className="zap-header">
+        <div className="zap-header mb-2">
           <div className="zap-title">Send Zap</div>
-          <button className="zap-close" onClick={onClose} aria-label="Close">
+          <button type="button" className="zap-close" onClick={onClose} aria-label="Close">
             <X size={16} />
           </button>
         </div>
-        <div className="zap-presets">
+        <div className="zap-presets mb-4">
           {resolvedPresets.map((value) => (
             <button
               key={value}
+              type="button"
               className={`zap-chip ${amount === value ? 'active' : ''}`}
               onClick={() => handlePreset(value)}
             >
-              <Zap size={14} /> {value} sats
+              <Zap size={14} /> {value}
             </button>
           ))}
         </div>
-        <label className="zap-label">Custom amount</label>
-        <input
-          className="zap-input"
+        
+        <FormGroup
+          label="Custom amount"
           value={custom}
-          onChange={(event) => handleCustomChange(event.target.value)}
+          onChange={handleCustomChange}
           placeholder="Custom sats"
+          className="mb-4"
         />
-        <label className="zap-label">Comment (optional)</label>
-        <textarea
-          className="zap-textarea"
-          rows={3}
+
+        <FormGroup
+          label="Comment (optional)"
+          type="textarea"
           value={comment}
-          onChange={(event) => setComment(event.target.value)}
+          onChange={setComment}
+          className="mb-4"
         />
-        {error && <div className="zap-error">{error}</div>}
-        <button className="zap-send" onClick={handleSend} disabled={sending || !amount}>
-          {sending ? 'Sending…' : 'Send Zap'}
-        </button>
+
+        {error && <div className="zap-error mb-2 text-red-400 font-medium">{error}</div>}
+        
+        <Button
+          variant="primary"
+          onClick={handleSend}
+          isLoading={sending}
+          disabled={!amount}
+          className="w-full"
+          leftIcon={!sending && <Zap size={16} />}
+        >
+          Send Zap
+        </Button>
       </div>
     </div>
   );

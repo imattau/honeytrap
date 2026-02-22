@@ -8,6 +8,7 @@ export interface P2PSettings {
   maxConcurrent: number;
   maxFileSizeMb: number;
   seedWhileOpen: boolean;
+  seedRelayEvents: boolean;
   trackers: string[];
 }
 

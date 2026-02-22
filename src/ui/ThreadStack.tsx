@@ -11,6 +11,9 @@ import { PostCard } from './PostCard';
 import { Composer } from './Composer';
 import { ZapComposer } from './ZapComposer';
 import { getThreadPreview } from './threadPreviewCache';
+import { EmptyState } from './EmptyState';
+import { Card } from './Card';
+import { MessageSquare } from 'lucide-react';
 
 export function ThreadStack() {
   const { id } = useParams<{ id: string }>();
@@ -134,7 +137,18 @@ export function ThreadStack() {
         overscan={600}
         components={{
           EmptyPlaceholder: () => (
-            <div className="thread-empty">{loading ? 'Loading thread…' : 'Thread unavailable.'}</div>
+            <div className="thread-item">
+              <Card className="w-full">
+                <EmptyState
+                  title={loading ? 'Loading thread…' : 'Thread unavailable'}
+                  message={loading ? 'Fetching conversation from relays.' : 'The requested event could not be found.'}
+                  loading={loading}
+                  icon={MessageSquare}
+                  actionLabel="Return to search"
+                  onAction={() => navigate('/search')}
+                />
+              </Card>
+            </div>
           )
         }}
         itemContent={(_, node) => (

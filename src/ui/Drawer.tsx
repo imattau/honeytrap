@@ -1,9 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { flushSync } from 'react-dom';
-import { Bell, KeyRound, List, LogOut, PencilLine, QrCode, Search, ShieldAlert, UserCircle, X } from 'lucide-react';
-import { QRCodeCanvas } from 'qrcode.react';
+import { Bell, List, LogOut, PencilLine, Search, UserCircle, X } from 'lucide-react';
 import { useAppState } from './AppState';
-import { createNostrConnectRequest, decodeKey } from '../nostr/auth';
 import { MenuState } from './MenuState';
 import { MediaRelaysSection } from './menu/MediaRelaysSection';
 import { NostrRelaysSection } from './menu/NostrRelaysSection';
@@ -11,6 +9,7 @@ import { TorrentSection } from './menu/TorrentSection';
 import { WalletSection } from './menu/WalletSection';
 import { MenuSection } from './menu/MenuSection';
 import { MenuPill } from './menu/MenuPill';
+import { SignInMenu } from './SignInMenu';
 import { useNavigate } from 'react-router-dom';
 import type { AppSettings } from '../storage/types';
 
@@ -38,12 +37,8 @@ export function Drawer() {
     disconnectNip46,
     setFeedMode
   } = useAppState();
+
   const [open, setOpen] = useState(false);
-  const [nsecInput, setNsecInput] = useState('');
-  const [bunkerInput, setBunkerInput] = useState('');
-  const [bunkerQr, setBunkerQr] = useState('');
-  const [nostrConnectUri, setNostrConnectUri] = useState('');
-  const [connectStatus, setConnectStatus] = useState<string | null>(null);
   const [savedSection, setSavedSection] = useState<'relays' | 'media' | 'torrent' | 'wallet' | null>(null);
   const [isWide, setIsWide] = useState(false);
   const [isTouch, setIsTouch] = useState(false);
@@ -52,8 +47,10 @@ export function Drawer() {
   const [touchStart, setTouchStart] = useState<number | null>(null);
   const touchStartXRef = useRef<number | null>(null);
   const touchScrollTopRef = useRef<number>(0);
+
   const fallbackAvatar = '/assets/honeytrap_logo_256.png';
   const headerImage = '/assets/honeytrap_header_960.png';
+  // @ts-ignore
   const appVersion = __APP_VERSION__;
 
   useEffect(() => {
@@ -94,90 +91,11 @@ export function Drawer() {
 
   const isAuthed = Boolean(keys?.npub);
 
-  const handleNsecSave = async () => {
-    if (!nsecInput.trim()) return;
-    const decoded = decodeKey(nsecInput.trim());
-    await saveKeyRecord({ npub: decoded.npub, nsec: decoded.nsec });
-    setNsecInput('');
-  };
-
-  const handleNip07 = async () => {
-    await connectNip07();
-  };
-
-  const handleBunkerConnect = async () => {
-    if (!bunkerInput.trim()) return;
-    setConnectStatus('Connecting...');
-    try {
-      const pubkey = await connectNip46(bunkerInput.trim(), (authUrl) => {
-        setConnectStatus(`Approve in bunker: ${authUrl}`);
-        if (isTouch) {
-          try {
-            window.location.href = authUrl;
-          } catch {
-            // ignore
-          }
-        } else {
-          setBunkerQr(authUrl);
-        }
-      });
-      setConnectStatus(`Connected as ${pubkey.slice(0, 10)}…`);
-    } catch (error) {
-      setConnectStatus(error instanceof Error ? error.message : 'Failed to connect');
-    }
-  };
-
-  const handleSignerConnect = async () => {
-    setConnectStatus('Waiting for signer approval...');
-    try {
-      const origin = window.location.origin;
-      const image = `${origin}/assets/honeytrap_logo_256.png`;
-      const { uri, secretKey } = createNostrConnectRequest({
-        relays: settings.relays,
-        perms: ['sign_event', 'nip44_encrypt', 'nip44_decrypt'],
-        name: 'Honeytrap',
-        url: origin,
-        image
-      });
-      setNostrConnectUri(uri);
-      setBunkerQr(uri);
-      if (isTouch) {
-        window.location.href = uri;
-      }
-      const pubkey = await connectNip46(uri, (authUrl) => {
-        setConnectStatus(`Approve in signer: ${authUrl}`);
-        if (isTouch) {
-          try {
-            window.location.href = authUrl;
-          } catch {
-            // ignore
-          }
-        }
-      }, secretKey);
-      setConnectStatus(`Connected as ${pubkey.slice(0, 10)}…`);
-    } catch (error) {
-      setConnectStatus(error instanceof Error ? error.message : 'Failed to connect');
-    }
-  };
-
-  const handleBunkerQr = () => {
-    setBunkerQr(bunkerInput.trim());
-  };
-
-  const handleSignerApp = () => {
-    const target = bunkerInput.trim();
-    if (!target) return;
-    try {
-      window.location.href = target;
-    } catch {
-      // ignore
-    }
-  };
-
   const handleSignOut = async () => {
     disconnectNip46();
     await clearKeys();
   };
+
   const handleMobileProfile = () => {
     if (!keys?.npub) {
       setOpen(true);
@@ -292,81 +210,26 @@ export function Drawer() {
           <img src={headerImage} alt="Honeytrap" />
         </div>
         <div className="drawer-version">v{appVersion}</div>
+
         {!isAuthed ? (
-          <MenuSection title="Sign in" icon={<KeyRound size={16} />} collapsible={false}>
-              {!isTouch && (
-                <button className="menu-button" onClick={handleNip07}>
-                  NIP-07 Extension
-                </button>
-              )}
-              <label className="menu-label"><QrCode size={14} /> NIP-46 / Bunker</label>
-              <input
-                className="menu-input"
-                placeholder="bunker:// or nostrconnect://"
-                value={bunkerInput}
-                onChange={(event) => setBunkerInput(event.target.value)}
-              />
-              <div className="menu-row">
-                <button className="menu-button" onClick={handleBunkerConnect}>
-                  Connect
-                </button>
-                <button className="menu-button" onClick={handleBunkerQr}>
-                  Show QR
-                </button>
-                {isTouch && (
-                  <button className="menu-button" onClick={handleSignerApp}>
-                    Open Signer App
-                  </button>
-                )}
-              </div>
-              <div className="menu-sub">Or start a signer app flow:</div>
-              <div className="menu-row">
-                <button className="menu-button" onClick={handleSignerConnect}>
-                  Generate Signer Link
-                </button>
-                {nostrConnectUri && (
-                  <button className="menu-button" onClick={() => setBunkerQr(nostrConnectUri)}>
-                    Show Signer QR
-                  </button>
-                )}
-              </div>
-              {connectStatus && <div className="menu-sub">{connectStatus}</div>}
-              {bunkerQr && (
-                <div className="drawer-qr">
-                  <QRCodeCanvas value={bunkerQr} size={164} bgColor="#0b0d10" fgColor="#e5edf7" />
-                </div>
-              )}
-              <label className="menu-label"><ShieldAlert size={14} /> Paste nsec (unsafe)</label>
-              <input
-                className="menu-input"
-                placeholder="nsec1..."
-                value={nsecInput}
-                onChange={(event) => setNsecInput(event.target.value)}
-              />
-              <div className="drawer-warning">Never use your primary key. Use a burner.</div>
-              <button className="menu-button" onClick={handleNsecSave}>
-                Save key
-              </button>
-          </MenuSection>
+          <SignInMenu
+            isTouch={isTouch}
+            relays={settings.relays}
+            saveKeyRecord={saveKeyRecord}
+            connectNip07={connectNip07}
+            connectNip46={connectNip46}
+          />
         ) : (
           <div className="menu-stack">
             <MenuSection title="Author" icon={<UserCircle size={16} />} collapsible={false}>
               {selfProfile ? (
-                <div
+                <button
+                  type="button"
                   className="drawer-author"
-                  role="button"
-                  tabIndex={0}
                   onClick={() => {
                     if (!keys?.npub) return;
                     flushSync(() => navigate(`/author/${keys.npub}`));
                     if (!isWide) setOpen(false);
-                  }}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter' || event.key === ' ') {
-                      event.preventDefault();
-                      if (keys?.npub) flushSync(() => navigate(`/author/${keys.npub}`));
-                      if (!isWide) setOpen(false);
-                    }
                   }}
                 >
                   {selfProfile.picture ? (
@@ -378,7 +241,7 @@ export function Drawer() {
                     <div className="drawer-name">{selfProfile.display_name ?? selfProfile.name ?? 'Unknown'}</div>
                     <div className="drawer-sub">{keys?.npub?.slice(0, 16)}…</div>
                   </div>
-                </div>
+                </button>
               ) : (
                 <div className="drawer-sub">Loading your profile…</div>
               )}
@@ -407,28 +270,44 @@ export function Drawer() {
                 />
               </div>
               <div className="menu-row">
-                <button type="button" className="menu-button" onClick={() => {
-                  flushSync(() => navigate('/search'));
-                  if (!isWide) setOpen(false);
-                }}>
+                <button
+                  type="button"
+                  className="menu-button"
+                  onClick={() => {
+                    flushSync(() => navigate('/search'));
+                    if (!isWide) setOpen(false);
+                  }}
+                >
                   <Search size={14} /> Search
                 </button>
-                <button type="button" className="menu-button" onClick={() => {
-                  flushSync(() => navigate('/notifications'));
-                  if (!isWide) setOpen(false);
-                }}>
+                <button
+                  type="button"
+                  className="menu-button"
+                  onClick={() => {
+                    flushSync(() => navigate('/notifications'));
+                    if (!isWide) setOpen(false);
+                  }}
+                >
                   <Bell size={14} /> Notifications
                 </button>
-                <button type="button" className="menu-button" onClick={() => {
-                  flushSync(() => navigate('/lists'));
-                  if (!isWide) setOpen(false);
-                }}>
+                <button
+                  type="button"
+                  className="menu-button"
+                  onClick={() => {
+                    flushSync(() => navigate('/lists'));
+                    if (!isWide) setOpen(false);
+                  }}
+                >
                   <List size={14} /> Lists
                 </button>
-                <button type="button" className="menu-button" onClick={() => {
-                  flushSync(() => navigate('/profile/edit'));
-                  if (!isWide) setOpen(false);
-                }}>
+                <button
+                  type="button"
+                  className="menu-button"
+                  onClick={() => {
+                    flushSync(() => navigate('/profile/edit'));
+                    if (!isWide) setOpen(false);
+                  }}
+                >
                   <PencilLine size={14} /> Edit profile
                 </button>
               </div>

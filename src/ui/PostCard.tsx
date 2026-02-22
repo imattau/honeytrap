@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Radio, Bolt, Link2, ShieldCheck, Sparkles, UserCircle, UserPlus, UserCheck, Ban, AlertTriangle, ChevronLeft, ChevronRight, Copy, Minus, Plus, X } from 'lucide-react';
+import { Sparkles, UserCircle } from 'lucide-react';
 import type { NostrEvent, ProfileMetadata } from '../nostr/types';
-import { extractMedia, type MediaSource } from '../nostr/media';
-import { extractLinks, type LinkPreviewSource } from '../nostr/links';
+import { extractMedia } from '../nostr/media';
+import { extractLinks } from '../nostr/links';
 import { extractEmojiMap, parseLongFormTags, stripInvisibleSeparators, tokenizeLineWithEmojiAndHashtags } from '../nostr/utils';
 import { useAppState } from './AppState';
 import { useNavigate } from 'react-router-dom';
@@ -10,9 +10,17 @@ import { flushSync } from 'react-dom';
 import { decodeNostrUri, encodeNpubUri, splitNostrContent } from '../nostr/uri';
 import { openThread } from './threadNavigation';
 import { PostActions } from './PostActions';
-import { IconButton } from './IconButton';
 import { isSensitiveEvent } from '../nostr/contentFlags';
 import { useTransportStatus } from './state/useTransportStatus';
+import { copyToClipboard, shortenId } from './utils';
+
+// Sub-components
+import { PostHeader } from './PostHeader';
+import { PostMediaItem } from './PostMediaItem';
+import { MediaLightbox } from './MediaLightbox';
+import { LinkPreviewCard } from './LinkPreviewCard';
+import { PostContextMenu } from './PostContextMenu';
+import { Card } from './Card';
 
 interface PostCardProps {
   event: NostrEvent;
@@ -61,6 +69,7 @@ export const PostCard = React.memo(function PostCard({
     shareEvent,
     hydrateProfiles
   } = useAppState();
+
   const [expanded] = useState(false);
   const [revealed, setRevealed] = useState(false);
   const [liked, setLiked] = useState(false);
@@ -71,8 +80,8 @@ export const PostCard = React.memo(function PostCard({
   const [menuPos, setMenuPos] = useState<{ x: number; y: number } | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const touchPressTimerRef = useRef<number | null>(null);
-  const fallbackAvatar = '/assets/honeytrap_logo_256.png';
   const navigate = useNavigate();
+
   const media = useMemo(() => extractMedia(event), [event]);
   const links = useMemo(() => extractLinks(event), [event]);
   const emojiMap = useMemo(() => extractEmojiMap(event.tags), [event.tags]);
@@ -105,70 +114,7 @@ export const PostCard = React.memo(function PostCard({
     hydrateProfiles([event.pubkey]).catch(() => null);
   }, [authorProfile, event.pubkey, hydrateProfiles]);
 
-  const renderContent = () => {
-    const cleaned = stripInvisibleSeparators(stripMediaUrls(event.content, media.map((item) => item.url)));
-    const parts = splitNostrContent(cleaned);
-    return parts.map((part, index) => {
-      if (part.type === 'text') {
-        return (
-          <React.Fragment key={`t-${index}`}>
-            {renderTextWithBreaks(part.value, (tag) => {
-              flushSync(() => navigate(`/tag/${encodeURIComponent(tag)}`));
-            }, emojiMap)}
-          </React.Fragment>
-        );
-      }
-      const decoded = decodeNostrUri(part.value);
-      if (!decoded) return <span key={`u-${index}`}>{part.value}</span>;
-      if (decoded.type === 'npub' || decoded.type === 'nprofile') {
-        const pubkey = decoded.pubkey;
-        const profileInfo = resolveProfile(profiles, pubkey);
-        return (
-          <button
-            key={`p-${index}`}
-            className="nostr-chip"
-            onClick={(e) => {
-              e.stopPropagation();
-              selectAuthor(pubkey);
-              flushSync(() => navigate(`/author/${pubkey}`));
-            }}
-          >
-            <UserCircle size={14} />
-            {profileInfo?.display_name ?? profileInfo?.name ?? pubkey.slice(0, 10)}
-          </button>
-        );
-      }
-      if (decoded.type === 'nevent' || decoded.type === 'note') {
-        const ev = findEventById(decoded.id);
-        if (ev) {
-          return (
-            <div
-              key={`e-${index}`}
-              className="nested-card"
-              onClick={(e) => {
-                e.stopPropagation();
-                openThread(navigate, ev);
-              }}
-            >
-              <div className="nested-title">Referenced event</div>
-              <p className="post-text">{ev.content.slice(0, 140)}{ev.content.length > 140 ? '…' : ''}</p>
-            </div>
-          );
-        }
-        return (
-          <button key={`e-${index}`}
-            className="nostr-chip"
-            onClick={(e) => e.stopPropagation()}>
-            {decoded.id.slice(0, 10)}…
-          </button>
-        );
-      }
-      return <span key={`u-${index}`}>{part.value}</span>;
-    });
-  };
-
-  const status = useTransportStatus(transportStore, event.id);
-
+  const transportStatus = useTransportStatus(transportStore, event.id);
   const followed = isFollowed(event.pubkey);
   const blocked = isBlocked(event.pubkey);
 
@@ -216,7 +162,7 @@ export const PostCard = React.memo(function PostCard({
     try {
       const uri = await shareEvent(event);
       setShared(true);
-      setToast(`Copied ${uri.slice(0, 26)}…`);
+      setToast(`Copied ${shortenId(uri, 26)}`);
     } catch {
       setToast('Unable to share event');
     } finally {
@@ -226,16 +172,17 @@ export const PostCard = React.memo(function PostCard({
 
   return (
     <>
-      <article
-        className={`post-card depth-${Math.min(depth, 6)} variant-${variant ?? 'normal'}`}
+      <Card
+        depth={depth}
+        variant={variant}
         onClick={() => openPrimary()}
-        onContextMenu={(eventArg) => {
-          eventArg.preventDefault();
-          eventArg.stopPropagation();
-          setMenuPos({ x: eventArg.clientX, y: eventArg.clientY });
+        onContextMenu={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          setMenuPos({ x: e.clientX, y: e.clientY });
         }}
-        onTouchStart={(touchEvent) => {
-          const touch = touchEvent.touches[0];
+        onTouchStart={(e) => {
+          const touch = e.touches[0];
           if (!touch) return;
           if (touchPressTimerRef.current) window.clearTimeout(touchPressTimerRef.current);
           touchPressTimerRef.current = window.setTimeout(() => {
@@ -255,83 +202,30 @@ export const PostCard = React.memo(function PostCard({
           }
         }}
       >
-        <header className="post-header">
-          <div className="post-author">
-            {authorProfile?.picture ? (
-              <img src={authorProfile.picture} alt="avatar" className="post-avatar" onClick={(e) => { e.stopPropagation(); flushSync(() => navigate(`/author/${event.pubkey}`)); }} />
-            ) : (
-              <img src={fallbackAvatar} alt="avatar" className="post-avatar fallback" onClick={(e) => { e.stopPropagation(); flushSync(() => navigate(`/author/${event.pubkey}`)); }} />
-            )}
-            <div>
-              <div
-                className="post-name"
-                role="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  flushSync(() => navigate(`/author/${event.pubkey}`));
-                }}
-              >
-                {authorProfile?.display_name ?? authorProfile?.name ?? event.pubkey.slice(0, 12)}
-              </div>
-              <div className="post-time">{new Date(event.created_at * 1000).toLocaleString()}</div>
-            </div>
-            <div className="author-actions">
-              <IconButton
-                title={followed ? 'Unfollow' : 'Follow'}
-                ariaLabel={followed ? 'Unfollow' : 'Follow'}
-                active={followed}
-                tone="follow"
-                variant="author"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  toggleFollow(event.pubkey);
-                }}
-              >
-                {followed ? <UserCheck size={14} /> : <UserPlus size={14} />}
-              </IconButton>
-              <IconButton
-                title={blocked ? 'Unblock' : 'Block'}
-                ariaLabel={blocked ? 'Unblock' : 'Block'}
-                active={blocked}
-                tone="block"
-                variant="author"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  toggleBlock(event.pubkey);
-                }}
-              >
-                <Ban size={14} />
-              </IconButton>
-              <IconButton
-                title={nsfwAuthor ? 'Unmark NSFW author' : 'Mark NSFW author'}
-                ariaLabel={nsfwAuthor ? 'Unmark NSFW author' : 'Mark NSFW author'}
-                active={nsfwAuthor}
-                tone="nsfw"
-                variant="author"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  toggleNsfwAuthor(event.pubkey);
-                }}
-              >
-                <AlertTriangle size={14} />
-              </IconButton>
-            </div>
-          </div>
-          <div className="post-icons">
-            <IconButton title="Relay" ariaLabel="Relay" active={status.relay} tone="relay">
-              <Radio size={16} />
-            </IconButton>
-            <IconButton title="P2P assist" ariaLabel="P2P assist" active={status.p2p} tone="p2p" className={status.p2p ? 'icon-btn--p2p-live' : undefined}>
-              <Bolt size={16} />
-            </IconButton>
-            <IconButton title="HTTP fallback" ariaLabel="HTTP fallback" active={status.http} tone="http">
-              <Link2 size={16} />
-            </IconButton>
-            <IconButton title="Verified" ariaLabel="Verified" active={status.verified} tone="verified">
-              <ShieldCheck size={16} />
-            </IconButton>
-          </div>
-        </header>
+        <PostHeader
+          event={event}
+          authorProfile={authorProfile}
+          followed={followed}
+          blocked={blocked}
+          nsfwAuthor={nsfwAuthor}
+          status={transportStatus}
+          onAuthorClick={(e) => {
+            e.stopPropagation();
+            flushSync(() => navigate(`/author/${event.pubkey}`));
+          }}
+          onFollowToggle={(e) => {
+            e.stopPropagation();
+            toggleFollow(event.pubkey);
+          }}
+          onBlockToggle={(e) => {
+            e.stopPropagation();
+            toggleBlock(event.pubkey);
+          }}
+          onNsfwToggle={(e) => {
+            e.stopPropagation();
+            toggleNsfwAuthor(event.pubkey);
+          }}
+        />
 
         {showActions && actionsPosition === 'top' && (
           <PostActions
@@ -349,6 +243,7 @@ export const PostCard = React.memo(function PostCard({
 
         {isSensitive && !revealed && (
           <button
+            type="button"
             className="nsfw-reveal"
             onClick={(e) => {
               e.stopPropagation();
@@ -359,21 +254,41 @@ export const PostCard = React.memo(function PostCard({
           </button>
         )}
 
-        <div className={`post-content ${isExpanded ? 'expanded' : 'collapsed'} ${isSensitive && !revealed ? 'nsfw-blur' : ''}`} onClick={(e) => { e.stopPropagation(); openPrimary(); }}>
+        <div
+          className={`post-content ${isExpanded ? 'expanded' : 'collapsed'} ${isSensitive && !revealed ? 'nsfw-blur' : ''}`}
+          onClick={(e) => {
+            e.stopPropagation();
+            openPrimary();
+          }}
+        >
           {isLongForm ? (
             <div className="space-y-2">
               <div className="post-title">{longForm?.title ?? 'Untitled long-form'}</div>
               <p className="post-text">{longForm?.summary ?? event.content}</p>
             </div>
           ) : (
-            <p className="post-text">{renderContent()}</p>
+            <div className="post-text">
+              <PostContent
+                content={event.content}
+                mediaUrls={media.map((m) => m.url)}
+                emojiMap={emojiMap}
+                findEventById={findEventById}
+                profiles={profiles}
+                onTagClick={(tag) => flushSync(() => navigate(`/tag/${encodeURIComponent(tag)}`))}
+                onAuthorClick={(pubkey) => {
+                  selectAuthor(pubkey);
+                  flushSync(() => navigate(`/author/${pubkey}`));
+                }}
+                onEventClick={(ev) => openThread(navigate, ev)}
+              />
+            </div>
           )}
         </div>
 
         {visibleMedia.length > 0 && (
           <div className={`post-media ${isSensitive && !revealed ? 'nsfw-blur' : ''}`}>
             {visibleMedia.map((item, idx) => (
-              <MediaItem
+              <PostMediaItem
                 key={item.url}
                 item={item}
                 eventId={event.id}
@@ -397,7 +312,14 @@ export const PostCard = React.memo(function PostCard({
         )}
 
         {hasMore && (
-          <button className="post-more" onClick={(e) => { e.stopPropagation(); openPrimary(); }}>
+          <button
+            type="button"
+            className="post-more"
+            onClick={(e) => {
+              e.stopPropagation();
+              openPrimary();
+            }}
+          >
             <Sparkles size={14} /> More
           </button>
         )}
@@ -415,7 +337,7 @@ export const PostCard = React.memo(function PostCard({
             disabled={busyAction !== null}
           />
         )}
-      </article>
+      </Card>
 
       {lightboxIndex !== null && (
         <MediaLightbox
@@ -451,6 +373,93 @@ export const PostCard = React.memo(function PostCard({
     </>
   );
 });
+
+/**
+ * Internal component to handle content rendering with parsing.
+ */
+function PostContent({
+  content,
+  mediaUrls,
+  emojiMap,
+  findEventById,
+  profiles,
+  onTagClick,
+  onAuthorClick,
+  onEventClick
+}: {
+  content: string;
+  mediaUrls: string[];
+  emojiMap: Record<string, string>;
+  findEventById: (id: string) => NostrEvent | undefined;
+  profiles: Record<string, ProfileMetadata>;
+  onTagClick: (tag: string) => void;
+  onAuthorClick: (pubkey: string) => void;
+  onEventClick: (event: NostrEvent) => void;
+}) {
+  const cleaned = stripInvisibleSeparators(stripMediaUrls(content, mediaUrls));
+  const parts = splitNostrContent(cleaned);
+
+  return (
+    <>
+      {parts.map((part, index) => {
+        if (part.type === 'text') {
+          return (
+            <React.Fragment key={`t-${index}`}>
+              {renderTextWithBreaks(part.value, onTagClick, emojiMap)}
+            </React.Fragment>
+          );
+        }
+
+        const decoded = decodeNostrUri(part.value);
+        if (!decoded) return <span key={`u-${index}`}>{part.value}</span>;
+
+        if (decoded.type === 'npub' || decoded.type === 'nprofile') {
+          const pubkey = decoded.pubkey;
+          const profileInfo = resolveProfile(profiles, pubkey);
+          return (
+            <button
+              key={`p-${index}`}
+              className="nostr-chip"
+              onClick={(e) => {
+                e.stopPropagation();
+                onAuthorClick(pubkey);
+              }}
+            >
+              <UserCircle size={14} />
+              {profileInfo?.display_name ?? profileInfo?.name ?? pubkey.slice(0, 10)}
+            </button>
+          );
+        }
+
+        if (decoded.type === 'nevent' || decoded.type === 'note') {
+          const ev = findEventById(decoded.id);
+          if (ev) {
+            return (
+              <div
+                key={`e-${index}`}
+                className="nested-card"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onEventClick(ev);
+                }}
+              >
+                <div className="nested-title">Referenced event</div>
+                <p className="post-text">{ev.content.slice(0, 140)}{ev.content.length > 140 ? '…' : ''}</p>
+              </div>
+            );
+          }
+          return (
+            <button key={`e-${index}`} className="nostr-chip" onClick={(e) => e.stopPropagation()}>
+              {decoded.id.slice(0, 10)}…
+            </button>
+          );
+        }
+
+        return <span key={`u-${index}`}>{part.value}</span>;
+      })}
+    </>
+  );
+}
 
 function renderTextWithBreaks(text: string, onTagClick: (tag: string) => void, emojiMap: Record<string, string>) {
   return text.split('\n').map((line, idx, arr) => (
@@ -510,325 +519,4 @@ function stripMediaUrls(content: string, mediaUrls: string[]) {
     cleaned = cleaned.replace(new RegExp(`\\s*${escaped}\\s*`, 'g'), ' ');
   });
   return cleaned.trim();
-}
-
-function MediaItem({
-  item,
-  eventId,
-  authorPubkey,
-  loadMedia,
-  onActivate
-}: {
-  item: MediaSource;
-  eventId: string;
-  authorPubkey: string;
-  loadMedia: (input: {
-    eventId: string;
-    source: { url: string; magnet?: string; sha256?: string; type: 'media' };
-    authorPubkey: string;
-    timeoutMs?: number;
-  }) => Promise<{ url: string; source: 'p2p' | 'http' }>;
-  onActivate?: () => void;
-}) {
-  const isVideo = isVideoUrl(item.url);
-  const [src, setSrc] = useState(item.url);
-  const [loaded, setLoaded] = useState(false);
-
-  useEffect(() => {
-    let active = true;
-    loadMedia({
-      eventId,
-      authorPubkey,
-      source: { url: item.url, magnet: item.magnet, sha256: item.sha256, type: 'media' },
-      timeoutMs: isVideo ? 4000 : 800
-    })
-      .then((result) => {
-        if (!active) return;
-        if (result.url !== item.url) setSrc(result.url);
-      })
-      .catch(() => null);
-    return () => {
-      active = false;
-    };
-  }, [authorPubkey, eventId, isVideo, item.magnet, item.sha256, item.url, loadMedia]);
-
-  return (
-    <button
-      type="button"
-      className={`post-media-shell ${loaded ? 'loaded' : ''} ${isVideo ? 'video' : 'image'}`}
-      onClick={(eventArg) => {
-        eventArg.stopPropagation();
-        onActivate?.();
-      }}
-    >
-      {isVideo ? (
-        <video
-          src={src}
-          controls
-          className="post-media-item"
-          onLoadedData={() => setLoaded(true)}
-        />
-      ) : (
-        <img
-          src={src}
-          alt="media"
-          className="post-media-item"
-          loading="lazy"
-          decoding="async"
-          onLoad={() => setLoaded(true)}
-        />
-      )}
-    </button>
-  );
-}
-
-function MediaLightbox({
-  items,
-  startIndex,
-  eventId,
-  authorPubkey,
-  loadMedia,
-  onClose
-}: {
-  items: MediaSource[];
-  startIndex: number;
-  eventId: string;
-  authorPubkey: string;
-  loadMedia: (input: {
-    eventId: string;
-    source: { url: string; magnet?: string; sha256?: string; type: 'media' };
-    authorPubkey: string;
-    timeoutMs?: number;
-  }) => Promise<{ url: string; source: 'p2p' | 'http' }>;
-  onClose: () => void;
-}) {
-  const [index, setIndex] = useState(startIndex);
-  const [zoom, setZoom] = useState(1);
-  const [touchStartX, setTouchStartX] = useState<number | null>(null);
-  const current = items[index] ?? items[0];
-
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose();
-      if (event.key === 'ArrowRight') setIndex((prev) => (prev + 1) % items.length);
-      if (event.key === 'ArrowLeft') setIndex((prev) => (prev - 1 + items.length) % items.length);
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [items.length, onClose]);
-
-  useEffect(() => {
-    setZoom(1);
-  }, [index]);
-
-  if (!current) return null;
-
-  return (
-    <div className="media-lightbox" onClick={onClose}>
-      <button className="media-lightbox-close" onClick={(eventArg) => {
-        eventArg.stopPropagation();
-        onClose();
-      }} aria-label="Close media viewer">
-        <X size={18} />
-      </button>
-      {items.length > 1 && (
-        <>
-          <button
-            className="media-lightbox-nav prev"
-            onClick={(eventArg) => {
-              eventArg.stopPropagation();
-              setIndex((prev) => (prev - 1 + items.length) % items.length);
-            }}
-            aria-label="Previous media"
-          >
-            <ChevronLeft size={20} />
-          </button>
-          <button
-            className="media-lightbox-nav next"
-            onClick={(eventArg) => {
-              eventArg.stopPropagation();
-              setIndex((prev) => (prev + 1) % items.length);
-            }}
-            aria-label="Next media"
-          >
-            <ChevronRight size={20} />
-          </button>
-        </>
-      )}
-      <div
-        className="media-lightbox-stage"
-        onClick={(eventArg) => eventArg.stopPropagation()}
-        onTouchStart={(eventArg) => setTouchStartX(eventArg.touches[0]?.clientX ?? null)}
-        onTouchEnd={(eventArg) => {
-          const endX = eventArg.changedTouches[0]?.clientX;
-          if (touchStartX === null || typeof endX !== 'number') return;
-          const delta = endX - touchStartX;
-          if (Math.abs(delta) < 40 || items.length <= 1) return;
-          if (delta > 0) setIndex((prev) => (prev - 1 + items.length) % items.length);
-          else setIndex((prev) => (prev + 1) % items.length);
-          setTouchStartX(null);
-        }}
-      >
-        <ResolvedLightboxMedia
-          item={current}
-          eventId={eventId}
-          authorPubkey={authorPubkey}
-          loadMedia={loadMedia}
-          zoom={zoom}
-          onZoomToggle={() => setZoom((prev) => (prev >= 2 ? 1 : 2))}
-        />
-      </div>
-      {!isVideoUrl(current.url) && (
-        <div className="media-lightbox-zoom" onClick={(eventArg) => eventArg.stopPropagation()}>
-          <button
-            className="media-lightbox-tool"
-            onClick={() => setZoom((prev) => Math.max(1, Number((prev - 0.25).toFixed(2))))}
-            aria-label="Zoom out"
-          >
-            <Minus size={16} />
-          </button>
-          <span>{Math.round(zoom * 100)}%</span>
-          <button
-            className="media-lightbox-tool"
-            onClick={() => setZoom((prev) => Math.min(3, Number((prev + 0.25).toFixed(2))))}
-            aria-label="Zoom in"
-          >
-            <Plus size={16} />
-          </button>
-        </div>
-      )}
-      <div className="media-lightbox-count">{index + 1} / {items.length}</div>
-    </div>
-  );
-}
-
-function ResolvedLightboxMedia({
-  item,
-  eventId,
-  authorPubkey,
-  loadMedia,
-  zoom,
-  onZoomToggle
-}: {
-  item: MediaSource;
-  eventId: string;
-  authorPubkey: string;
-  loadMedia: (input: {
-    eventId: string;
-    source: { url: string; magnet?: string; sha256?: string; type: 'media' };
-    authorPubkey: string;
-    timeoutMs?: number;
-  }) => Promise<{ url: string; source: 'p2p' | 'http' }>;
-  zoom: number;
-  onZoomToggle: () => void;
-}) {
-  const isVideo = isVideoUrl(item.url);
-  const [src, setSrc] = useState(item.url);
-
-  useEffect(() => {
-    let active = true;
-    loadMedia({
-      eventId,
-      authorPubkey,
-      source: { url: item.url, magnet: item.magnet, sha256: item.sha256, type: 'media' },
-      timeoutMs: isVideo ? 5000 : 1200
-    })
-      .then((result) => {
-        if (!active) return;
-        if (result.url !== item.url) setSrc(result.url);
-      })
-      .catch(() => null);
-    return () => {
-      active = false;
-    };
-  }, [authorPubkey, eventId, isVideo, item.magnet, item.sha256, item.url, loadMedia]);
-
-  if (isVideo) {
-    return <video className="media-lightbox-item" src={src} controls autoPlay />;
-  }
-
-  return (
-    <img
-      className="media-lightbox-item"
-      src={src}
-      alt="media"
-      style={{ transform: `scale(${zoom})` }}
-      onDoubleClick={() => onZoomToggle()}
-    />
-  );
-}
-
-function PostContextMenu({
-  position,
-  onClose,
-  onCopyEventId,
-  onCopyAuthor,
-  onCopyRaw
-}: {
-  position: { x: number; y: number };
-  onClose: () => void;
-  onCopyEventId: () => Promise<void>;
-  onCopyAuthor: () => Promise<void>;
-  onCopyRaw: () => Promise<void>;
-}) {
-  return (
-    <div className="post-context-layer" onClick={onClose}>
-      <div
-        className="post-context-menu"
-        style={{ left: clamp(position.x, 14, window.innerWidth - 210), top: clamp(position.y, 14, window.innerHeight - 160) }}
-        onClick={(eventArg) => eventArg.stopPropagation()}
-      >
-        <button className="post-context-item" onClick={() => { onCopyEventId().catch(() => null); onClose(); }}>
-          <Copy size={14} /> Copy event ID
-        </button>
-        <button className="post-context-item" onClick={() => { onCopyAuthor().catch(() => null); onClose(); }}>
-          <Copy size={14} /> Copy npub
-        </button>
-        <button className="post-context-item" onClick={() => { onCopyRaw().catch(() => null); onClose(); }}>
-          <Copy size={14} /> Copy raw JSON
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function LinkPreviewCard({ item }: { item: LinkPreviewSource }) {
-  let host = item.url;
-  let path = '';
-  try {
-    const parsed = new URL(item.url);
-    host = parsed.hostname;
-    path = parsed.pathname.length > 1 ? parsed.pathname : '';
-  } catch {
-    // keep url as-is
-  }
-  return (
-    <a className="link-preview" href={item.url} target="_blank" rel="noreferrer">
-      <div className="link-host">{host}</div>
-      <div className="link-path">{path || item.url}</div>
-    </a>
-  );
-}
-
-function isVideoUrl(url: string) {
-  return /\.(mp4|webm|mov|m4v)(\?|#|$)/i.test(url);
-}
-
-function clamp(value: number, min: number, max: number) {
-  return Math.min(max, Math.max(min, value));
-}
-
-async function copyToClipboard(value: string): Promise<void> {
-  if (navigator.clipboard?.writeText) {
-    await navigator.clipboard.writeText(value);
-    return;
-  }
-  const area = document.createElement('textarea');
-  area.value = value;
-  area.style.position = 'fixed';
-  area.style.opacity = '0';
-  document.body.appendChild(area);
-  area.select();
-  document.execCommand('copy');
-  document.body.removeChild(area);
 }

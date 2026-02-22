@@ -32,12 +32,13 @@ const P2PContext = createContext<P2PContextValue | undefined>(undefined);
 export function P2PProvider({ children }: { children: React.ReactNode }) {
   const { settings, updateSettings } = useSettings();
   const { keys, signer, nip44Cipher } = useAuth();
-  const { nostr } = useNostr();
+  const { nostr, cache } = useNostr();
   const { transportStore } = useTransport();
 
   const { torrentSnapshot, canEncryptNip44, magnetBuilder, loadMedia, seedMediaFile, seedEvent, reseedTorrent, assistEvent, loadP2PSettings, publishP2PSettings } = useP2PState({
     settings,
     nostr,
+    cache,
     signer,
     nip44Cipher,
     keysNpub: keys?.npub,

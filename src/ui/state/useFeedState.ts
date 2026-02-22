@@ -41,9 +41,16 @@ export function useFeedState({
 
   const feedService = useMemo(() => new WorkerFeedService(nostr), [nostr]);
   const timelineCache = useMemo(() => new FeedTimelineCache(), []);
+  
+  // Use a ref for isBlocked to avoid orchestrator recreation on every render
+  const isBlockedRef = useRef(isBlocked);
+  useEffect(() => {
+    isBlockedRef.current = isBlocked;
+  }, [isBlocked]);
+
   const orchestrator = useMemo(
-    () => new FeedOrchestrator(nostr, feedService, transportStore, isBlocked, onEventAssist, cache, verifier),
-    [nostr, feedService, transportStore, isBlocked, onEventAssist, cache, verifier]
+    () => new FeedOrchestrator(nostr, feedService, transportStore, (pk) => isBlockedRef.current(pk), onEventAssist, cache, verifier),
+    [nostr, feedService, transportStore, onEventAssist, cache, verifier]
   );
 
   const eventsRef = useRef<NostrEvent[]>([]);
@@ -126,13 +133,13 @@ export function useFeedState({
       mergeProfiles,
       setPendingCountBatched
     );
-  }, [orchestrator, settings.follows, settings.selectedListId, settings.feedMode, followers, setFeedLoadingSafe, mergeProfiles, setPendingCountBatched, timelineCache]);
+  }, [orchestrator, settings.follows, settings.selectedListId, settings.feedMode, followers, setFeedLoadingSafe, mergeProfiles, setPendingCountBatched, timelineCache, relays]);
 
   useEffect(() => {
     orchestrator.stop();
     subscribeFeed();
     return () => orchestrator.stop();
-  }, [subscribeFeed, orchestrator, feedService]);
+  }, [subscribeFeed, orchestrator]);
 
   useEffect(() => {
     return () => {
@@ -151,9 +158,9 @@ export function useFeedState({
     } finally {
       setFeedLoadingSafe(false);
     }
-  }, [orchestrator, settings.follows, settings.selectedListId, settings.feedMode, followers, setFeedLoadingSafe, timelineCache]);
+  }, [orchestrator, settings.follows, settings.selectedListId, settings.feedMode, followers, setFeedLoadingSafe, timelineCache, relays]);
 
-  const flushPending = () => {
+  const flushPending = useCallback(() => {
     orchestrator.flushPending(() => eventsRef.current, (next) => timelineCache.set(next));
     pendingCountRef.current = 0;
     if (pendingTimerRef.current) {
@@ -161,24 +168,26 @@ export function useFeedState({
       pendingTimerRef.current = null;
     }
     setPendingCount(0);
-  };
+  }, [orchestrator, timelineCache]);
 
-  const selectEvent = (event?: NostrEvent) => {
+  const selectEvent = useCallback((event?: NostrEvent) => {
     setSelectedEvent(event);
-    if (event) setSelectedAuthor(event.pubkey);
-    if (event) orchestrator.ensureProfile(event.pubkey, mergeProfiles);
-  };
+    if (event) {
+      setSelectedAuthor(event.pubkey);
+      orchestrator.ensureProfile(event.pubkey, mergeProfiles);
+    }
+  }, [orchestrator, mergeProfiles]);
 
-  const selectAuthor = (pubkey?: string) => {
+  const selectAuthor = useCallback((pubkey?: string) => {
     setSelectedAuthor(pubkey);
     if (pubkey) orchestrator.ensureProfile(pubkey, mergeProfiles);
-  };
+  }, [orchestrator, mergeProfiles]);
 
-  const applySettings = (next: AppSettings) => {
+  const applySettings = useCallback((next: AppSettings) => {
     const graph = new SocialGraph(next);
     const base = graph.filterEvents(eventsRef.current);
     timelineCache.set(filterByFeedMode(base, next, followers));
-  };
+  }, [followers, timelineCache]);
 
   useEffect(() => {
     orchestrator.setPaused(paused);

@@ -6,6 +6,8 @@ import type { NostrEvent } from '../nostr/types';
 import { useAppState } from './AppState';
 import { PostCard } from './PostCard';
 import { openThread } from './threadNavigation';
+import { dedupeEvents } from './utils';
+import { EmptyState } from './EmptyState';
 
 export function NotificationsView() {
   const { keys, profiles, fetchMentions, subscribeMentions, hydrateProfiles } = useAppState();
@@ -100,18 +102,17 @@ export function NotificationsView() {
         )}
         components={{
           EmptyPlaceholder: () => (
-            <div className="author-empty">{loading ? 'Loading notifications…' : (keys?.npub ? 'No notifications yet.' : 'Sign in to load notifications.')}</div>
+            <EmptyState
+              title={loading ? 'Loading notifications…' : (keys?.npub ? 'No notifications yet' : 'Sign in required')}
+              message={loading ? 'Fetching mentions and reactions.' : (keys?.npub ? 'You have no new interactions.' : 'Please sign in to view your notifications.')}
+              loading={loading}
+              icon={Bell}
+              actionLabel={!loading && keys?.npub ? 'Back to feed' : undefined}
+              onAction={() => navigate('/')}
+            />
           )
         }}
       />
     </div>
   );
-}
-
-function dedupeEvents(events: NostrEvent[]) {
-  const map = new Map<string, NostrEvent>();
-  events.forEach((event) => {
-    if (!map.has(event.id)) map.set(event.id, event);
-  });
-  return Array.from(map.values()).sort((a, b) => b.created_at - a.created_at || b.id.localeCompare(a.id));
 }

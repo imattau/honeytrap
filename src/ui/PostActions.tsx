@@ -16,19 +16,64 @@ export interface PostActionsProps {
 export function PostActions({ onReply, onRepost, onLike, onZap, onShare, reposted, liked, shared, disabled }: PostActionsProps) {
   return (
     <div className="post-actions">
-      <button type="button" className="action-icon" onClick={onReply} aria-label="Reply" disabled={disabled}>
+      <button
+        type="button"
+        className="action-icon"
+        onClick={(e) => {
+          e.stopPropagation();
+          onReply?.();
+        }}
+        aria-label="Reply"
+        disabled={disabled}
+      >
         <Reply size={16} />
       </button>
-      <button type="button" className={`action-icon ${reposted ? 'is-active is-repost' : ''}`} onClick={onRepost} aria-label="Repost" disabled={disabled}>
+      <button
+        type="button"
+        className={`action-icon ${reposted ? 'is-active is-repost' : ''}`}
+        onClick={(e) => {
+          e.stopPropagation();
+          onRepost?.();
+        }}
+        aria-label="Repost"
+        disabled={disabled}
+      >
         <Repeat2 size={16} />
       </button>
-      <button type="button" className={`action-icon ${liked ? 'is-active is-like' : ''}`} onClick={onLike} aria-label="Like" disabled={disabled}>
+      <button
+        type="button"
+        className={`action-icon ${liked ? 'is-active is-like' : ''}`}
+        onClick={(e) => {
+          e.stopPropagation();
+          onLike?.();
+        }}
+        aria-label="Like"
+        disabled={disabled}
+      >
         <Heart size={16} />
       </button>
-      <button type="button" className="action-icon" onClick={onZap} aria-label="Zap" disabled={disabled}>
+      <button
+        type="button"
+        className="action-icon"
+        onClick={(e) => {
+          e.stopPropagation();
+          onZap?.();
+        }}
+        aria-label="Zap"
+        disabled={disabled}
+      >
         <Zap size={16} />
       </button>
-      <button type="button" className={`action-icon ${shared ? 'is-active is-share' : ''}`} onClick={onShare} aria-label="Share" disabled={disabled}>
+      <button
+        type="button"
+        className={`action-icon ${shared ? 'is-active is-share' : ''}`}
+        onClick={(e) => {
+          e.stopPropagation();
+          onShare?.();
+        }}
+        aria-label="Share"
+        disabled={disabled}
+      >
         <Share2 size={16} />
       </button>
     </div>

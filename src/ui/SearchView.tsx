@@ -6,6 +6,7 @@ import type { NostrEvent, ProfileMetadata } from '../nostr/types';
 import { decodeKey } from '../nostr/auth';
 import { decodeNostrUri } from '../nostr/uri';
 import { useAppState } from './AppState';
+import { PageHeader } from './PageHeader';
 
 export function SearchView() {
   const navigate = useNavigate();
@@ -53,10 +54,12 @@ export function SearchView() {
 
   return (
     <div className="search-view">
-      <div className="search-header">
-        <div className="search-title">Search</div>
-        <div className="search-sub">Find users by name/npub and events by note/nevent/content.</div>
-      </div>
+      <PageHeader
+        title="Search"
+        subtitle="Find users by name/npub and events by note/nevent/content."
+        className="search-header"
+      />
+      
       <div className="search-form">
         <label htmlFor="search-input" className="search-label">Query</label>
         <div className="search-row">
@@ -70,7 +73,12 @@ export function SearchView() {
               if (event.key === 'Enter') runSearch().catch(() => null);
             }}
           />
-          <button className="search-button" onClick={() => runSearch().catch(() => null)} disabled={loading || !query.trim()}>
+          <button
+            type="button"
+            className="search-button"
+            onClick={() => runSearch().catch(() => null)}
+            disabled={loading || !query.trim()}
+          >
             <Search size={16} /> {loading ? 'Searching…' : 'Search'}
           </button>
         </div>
@@ -83,6 +91,7 @@ export function SearchView() {
           {profileEntries.map(([pubkey, profile]) => (
             <button
               key={pubkey}
+              type="button"
               className="search-result"
               onClick={() => flushSync(() => navigate(`/author/${pubkey}`))}
             >
@@ -102,6 +111,7 @@ export function SearchView() {
           {eventResults.map((event) => (
             <button
               key={event.id}
+              type="button"
               className="search-result"
               onClick={() => {
                 if (event.kind === 30023) {

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { X, Paperclip, UploadCloud, Trash2, Send, Link2, Plus } from 'lucide-react';
 import type { NostrEvent } from '../nostr/types';
+import { Button } from './Button';
 
 export interface ComposerInput {
   content: string;
@@ -27,6 +28,7 @@ export function Composer({ open, replyTo, onClose, onSubmit, mediaRelays = [], o
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
   useEffect(() => {
     if (!selectedRelay && mediaRelays.length > 0) {
       setSelectedRelay(mediaRelays[0]);
@@ -100,24 +102,25 @@ export function Composer({ open, replyTo, onClose, onSubmit, mediaRelays = [], o
       <div className="composer-panel">
         <div className="composer-header">
           <div className="composer-title">{replyTo ? 'Reply' : 'New Post'}</div>
-          <button className="composer-close" onClick={onClose}>
+          <button type="button" className="composer-close" onClick={onClose} aria-label="Close">
             <X size={16} />
           </button>
         </div>
         {replyTo && (
           <div className="composer-reply">Replying to {replyTo.pubkey.slice(0, 10)}…</div>
         )}
-        {error && <div className="composer-error">{error}</div>}
+        {error && <div className="composer-error text-red-400 font-medium">{error}</div>}
         <textarea
           className="composer-textarea"
           placeholder={replyTo ? 'Write your reply…' : 'Write a new post…'}
           value={content}
           onChange={(event) => setContent(event.target.value)}
           rows={5}
+          autoFocus
         />
         <div className="composer-media">
           <div className="composer-row">
-            <label><Paperclip size={14} /> Media Relay</label>
+            <label className="search-label mb-1"><Paperclip size={14} /> Media Relay</label>
             <div className="composer-row-inline">
               <select
                 className="composer-select"
@@ -143,6 +146,7 @@ export function Composer({ open, replyTo, onClose, onSubmit, mediaRelays = [], o
                 />
               </label>
               <button
+                type="button"
                 className={`composer-icon ${showManual ? 'active' : ''}`}
                 onClick={() => setShowManual((prev) => !prev)}
                 aria-label="Add media URL"
@@ -162,26 +166,33 @@ export function Composer({ open, replyTo, onClose, onSubmit, mediaRelays = [], o
             )}
           </div>
           {showManual && (
-            <div className="composer-row">
-              <label><Link2 size={14} /> Media URL</label>
+            <div className="composer-row mt-2">
+              <label className="search-label mb-1"><Link2 size={14} /> Media URL</label>
               <div className="composer-row-inline">
                 <input
+                  className="search-input"
                   value={manualUrl}
                   onChange={(event) => setManualUrl(event.target.value)}
                   placeholder="https://…"
                 />
-                <button className="composer-icon" onClick={handleAddManual} aria-label="Add media URL">
+                <button
+                  type="button"
+                  className="composer-icon"
+                  onClick={handleAddManual}
+                  aria-label="Add URL"
+                >
                   <Plus size={16} />
                 </button>
               </div>
             </div>
           )}
           {media.length > 0 && (
-            <div className="composer-media-list">
+            <div className="composer-media-list mt-3">
               {media.map((item) => (
                 <div className="composer-media-chip" key={item.url}>
-                  <span>{item.url}</span>
+                  <span className="truncate">{item.url}</span>
                   <button
+                    type="button"
                     className="composer-icon"
                     aria-label="Remove media"
                     onClick={() => setMedia((prev) => prev.filter((entry) => entry.url !== item.url))}
@@ -193,9 +204,16 @@ export function Composer({ open, replyTo, onClose, onSubmit, mediaRelays = [], o
             </div>
           )}
         </div>
-        <button className="composer-button primary" onClick={handleSubmit} disabled={saving}>
-          <Send size={16} /> {saving ? 'Sending…' : replyTo ? 'Send reply' : 'Publish'}
-        </button>
+        <Button
+          variant="primary"
+          onClick={handleSubmit}
+          isLoading={saving}
+          disabled={!content.trim() || uploading}
+          className="mt-2"
+          leftIcon={!saving && <Send size={16} />}
+        >
+          {replyTo ? 'Send reply' : 'Publish'}
+        </Button>
       </div>
     </div>
   );

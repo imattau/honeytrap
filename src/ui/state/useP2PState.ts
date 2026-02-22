@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { AppSettings } from '../../storage/types';
 import type { NostrClient } from '../../nostr/client';
+import type { NostrCache } from '../../nostr/cache';
 import type { EventSigner } from '../../nostr/signer';
 import { MediaAssist } from '../../p2p/mediaAssist';
 import { MagnetBuilder } from '../../p2p/magnetBuilder';
@@ -18,6 +19,7 @@ import { EventAssistService } from '../../p2p/eventAssistService';
 export function useP2PState({
   settings,
   nostr,
+  cache,
   signer,
   nip44Cipher,
   keysNpub,
@@ -25,6 +27,7 @@ export function useP2PState({
 }: {
   settings: AppSettings;
   nostr: NostrClient;
+  cache: NostrCache;
   signer: EventSigner;
   nip44Cipher: Nip44Cipher;
   keysNpub?: string;
@@ -107,25 +110,33 @@ export function useP2PState({
         if (item.availableUntil && now > item.availableUntil) return;
         if (item.mode === 'seed') {
           torrentRegistry.start({ magnet: item.magnet, mode: 'seed', name: item.name, eventId: item.eventId, authorPubkey: item.authorPubkey, availableUntil: item.availableUntil });
-          try {
-            webtorrentHub.ensure(item.magnet, (torrent) => {
-              torrentRegistry.update(item.magnet, { name: torrent.name });
-              const update = () => torrentRegistry.update(item.magnet, {
-                peers: torrent.numPeers,
-                progress: torrent.progress,
-                downloaded: torrent.downloaded,
-                uploaded: torrent.uploaded
+          if (item.eventId) {
+            // Re-seed from cached event bytes so we act as a seeder, not a leecher
+            cache.getEvent(item.eventId).then((event) => {
+              if (!active || !event) return;
+              magnetBuilder.buildEventPackage(event).catch(() => undefined);
+            }).catch(() => undefined);
+          } else {
+            try {
+              webtorrentHub.ensure(item.magnet, (torrent) => {
+                torrentRegistry.update(item.magnet, { name: torrent.name });
+                const update = () => torrentRegistry.update(item.magnet, {
+                  peers: torrent.numPeers,
+                  progress: torrent.progress,
+                  downloaded: torrent.downloaded,
+                  uploaded: torrent.uploaded
+                });
+                torrent.on('download', update);
+                torrent.on('upload', update);
+                torrent.on('wire', update);
+                torrent.on('noPeers', update);
+                torrent.on('done', update);
+                torrent.on('error', () => torrentRegistry.finish(item.magnet));
+                torrent.on('close', () => torrentRegistry.finish(item.magnet));
               });
-              torrent.on('download', update);
-              torrent.on('upload', update);
-              torrent.on('wire', update);
-              torrent.on('noPeers', update);
-              torrent.on('done', update);
-              torrent.on('error', () => torrentRegistry.finish(item.magnet));
-              torrent.on('close', () => torrentRegistry.finish(item.magnet));
-            });
-          } catch {
-            // WebTorrent client not ready; skip this torrent for now
+            } catch {
+              // WebTorrent client not ready; skip this torrent for now
+            }
           }
         } else if (item.url?.startsWith('http')) {
           const source: AssistSource = {
@@ -246,9 +257,6 @@ export function useP2PState({
     const shouldReseed = currentSettings.p2p.enabled && allowP2P && Boolean(source.magnet) && source.url.startsWith('http');
     const result = await mediaAssist.load(assistSource, allowP2P, timeoutMs ?? 2000);
     transportStore.mark(eventId, { [result.source]: true });
-    if (result.source === 'http' && shouldReseed) {
-      transportStore.mark(eventId, { p2p: true });
-    }
     return result;
   }, [mediaAssist, transportStore, OWN_AVAILABILITY_MS, OTHER_AVAILABILITY_MS]);
 

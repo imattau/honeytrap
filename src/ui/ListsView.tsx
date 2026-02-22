@@ -3,6 +3,9 @@ import { ListPlus, Users } from 'lucide-react';
 import { decodeKey } from '../nostr/auth';
 import type { ListDescriptor } from '../nostr/types';
 import { useAppState } from './AppState';
+import { PageHeader } from './PageHeader';
+import { FormGroup } from './FormGroup';
+import { EmptyState } from './EmptyState';
 
 export function ListsView() {
   const { keys, fetchLists, publishPeopleList } = useAppState();
@@ -63,27 +66,58 @@ export function ListsView() {
   };
 
   if (!keys?.npub) {
-    return <div className="author-empty">Sign in to view and publish NIP-51 lists.</div>;
+    return (
+      <div className="lists-view">
+        <PageHeader
+          title="Lists"
+          subtitle="View your NIP-51 lists and publish a new people list."
+          icon={<Users size={18} />}
+          className="search-header"
+        />
+        <EmptyState
+          title="Sign in required"
+          message="Sign in to view and publish NIP-51 lists."
+          icon={Users}
+        />
+      </div>
+    );
   }
 
   return (
     <div className="lists-view">
-      <div className="search-header">
-        <div className="search-title"><Users size={18} /> Lists</div>
-        <div className="search-sub">View your NIP-51 lists and publish a new people list.</div>
-      </div>
+      <PageHeader
+        title="Lists"
+        subtitle="View your NIP-51 lists and publish a new people list."
+        icon={<Users size={18} />}
+        className="search-header"
+      />
 
       <div className="profile-edit-form">
-        <label className="search-label">List title</label>
-        <input className="search-input" value={title} onChange={(event) => setTitle(event.target.value)} />
+        <FormGroup
+          label="List title"
+          value={title}
+          onChange={setTitle}
+        />
 
-        <label className="search-label">Description</label>
-        <input className="search-input" value={description} onChange={(event) => setDescription(event.target.value)} />
+        <FormGroup
+          label="Description"
+          value={description}
+          onChange={setDescription}
+        />
 
-        <label className="search-label">Pubkeys / npubs (one per line)</label>
-        <textarea className="profile-edit-textarea" value={pubkeysInput} onChange={(event) => setPubkeysInput(event.target.value)} />
+        <FormGroup
+          label="Pubkeys / npubs (one per line)"
+          type="textarea"
+          value={pubkeysInput}
+          onChange={setPubkeysInput}
+        />
 
-        <button className="search-button" onClick={() => createList().catch(() => null)} disabled={!canCreate}>
+        <button
+          type="button"
+          className="search-button"
+          onClick={() => createList().catch(() => null)}
+          disabled={!canCreate}
+        >
           <ListPlus size={16} /> {saving ? 'Publishing…' : 'Publish list'}
         </button>
         {status && <div className="search-sub">{status}</div>}
@@ -91,8 +125,19 @@ export function ListsView() {
 
       <div className="search-results">
         <div className="search-section-title">Existing lists</div>
-        {loading && <div className="author-empty">Loading lists…</div>}
-        {!loading && lists.length === 0 && <div className="author-empty">No lists found.</div>}
+        {loading && (
+          <EmptyState
+            title="Loading lists…"
+            loading={true}
+          />
+        )}
+        {!loading && lists.length === 0 && (
+          <EmptyState
+            title="No lists found"
+            message="You haven't created any NIP-51 people lists yet."
+            icon={Users}
+          />
+        )}
         {lists.map((list) => (
           <div key={list.id} className="search-result static">
             <Users size={16} />

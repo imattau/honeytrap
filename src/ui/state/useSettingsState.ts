@@ -10,10 +10,13 @@ export function useSettingsState(defaultSettings: AppSettings, onUpdate?: (next:
     settingsStore.load().then(setSettingsState);
   }, [settingsStore]);
 
-  const updateSettings = useCallback((next: AppSettings) => {
-    setSettingsState(next);
-    settingsStore.save(next).catch(() => null);
-    if (onUpdate) onUpdate(next);
+  const updateSettings = useCallback((next: AppSettings | ((prev: AppSettings) => AppSettings)) => {
+    setSettingsState((prev) => {
+      const updated = typeof next === 'function' ? next(prev) : next;
+      settingsStore.save(updated).catch(() => null);
+      if (onUpdate) onUpdate(updated);
+      return updated;
+    });
   }, [onUpdate, settingsStore]);
 
   return { settings, updateSettings, settingsStore };

@@ -29,6 +29,7 @@ export const defaultSettings: AppSettings = {
     maxConcurrent: 5,
     maxFileSizeMb: 50,
     seedWhileOpen: true,
+    seedRelayEvents: false,
     trackers: [
       'wss://tracker.openwebtorrent.com',
       'wss://tracker.btorrent.xyz'

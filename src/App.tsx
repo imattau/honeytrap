@@ -17,6 +17,8 @@ import { SearchView } from './ui/SearchView';
 import { NotificationsView } from './ui/NotificationsView';
 import { ProfileEditView } from './ui/ProfileEditView';
 import { ListsView } from './ui/ListsView';
+import { EmptyState } from './ui/EmptyState';
+import { Search } from 'lucide-react';
 
 const FEED_SCROLL_KEY = 'honeytrap:feed-scroll-top';
 
@@ -194,13 +196,29 @@ function Feed() {
           if (atTop) flushPendingSafe();
         }}
         components={{
-          EmptyPlaceholder: () => (
-            <FeedEmptyState
-              authed={Boolean(keys?.npub)}
-              hasFollows={following.length > 0}
-              onSearch={() => navigate('/search')}
-            />
-          )
+          EmptyPlaceholder: () => {
+            const authed = Boolean(keys?.npub);
+            if (!authed) {
+              return (
+                <EmptyState
+                  title="Welcome to Honeytrap"
+                  message="Open Menu, sign in with NIP-07/NIP-46, then load your feed."
+                  icon={Search}
+                  actionLabel="Open search"
+                  onAction={() => navigate('/search')}
+                />
+              );
+            }
+            return (
+              <EmptyState
+                title="Your feed is empty"
+                message={following.length > 0 ? 'No posts found yet from your selected mode.' : 'Follow people or switch to Global mode to discover posts.'}
+                icon={Search}
+                actionLabel="Open search"
+                onAction={() => navigate('/search')}
+              />
+            );
+          }
         }}
         itemContent={(_, event) => (
           <div className="feed-item">
@@ -284,33 +302,6 @@ function AppRoutes() {
       <Route path="/" element={<Feed />} />
       <Route path="*" element={<Feed />} />
     </Routes>
-  );
-}
-
-function FeedEmptyState({
-  authed,
-  hasFollows,
-  onSearch
-}: {
-  authed: boolean;
-  hasFollows: boolean;
-  onSearch: () => void;
-}) {
-  return (
-    <div className="feed-empty-state">
-      {!authed ? (
-        <>
-          <div className="feed-empty-title">Welcome to Honeytrap</div>
-          <div className="feed-empty-copy">Open Menu, sign in with NIP-07/NIP-46, then load your feed.</div>
-        </>
-      ) : (
-        <>
-          <div className="feed-empty-title">Your feed is empty</div>
-          <div className="feed-empty-copy">{hasFollows ? 'No posts found yet from your selected mode.' : 'Follow people or switch to Global mode to discover posts.'}</div>
-        </>
-      )}
-      <button className="feed-empty-action" onClick={onSearch}>Open search</button>
-    </div>
   );
 }
 

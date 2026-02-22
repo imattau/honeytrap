@@ -71,6 +71,17 @@ export function FeedProvider({ children }: { children: React.ReactNode }) {
   const isBlockedRef = useRef(isBlocked);
   useEffect(() => { isBlockedRef.current = isBlocked; }, [isBlocked]);
 
+  const onEventAssist = useCallback(async (event: NostrEvent) => {
+    await assistEvent(event);
+    // Gap 3: seed relay-received events that have no bt tag, when opt-in is enabled
+    if (settings.p2p.enabled && settings.p2p.seedRelayEvents) {
+      const hasBtTag = event.tags.some((t) => t[0] === 'bt');
+      if (!hasBtTag) {
+        seedEvent(event).catch(() => undefined);
+      }
+    }
+  }, [assistEvent, seedEvent, settings.p2p.enabled, settings.p2p.seedRelayEvents]);
+
   const feedState = useFeedState({
     nostr,
     transportStore,
@@ -79,7 +90,7 @@ export function FeedProvider({ children }: { children: React.ReactNode }) {
     relays: settings.relays,
     isBlocked: (pk) => isBlockedRef.current(pk),
     cache,
-    onEventAssist: assistEvent,
+    onEventAssist,
     verifier
   });
 
