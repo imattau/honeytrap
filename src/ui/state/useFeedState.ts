@@ -147,7 +147,7 @@ export function useFeedState({
       mergeProfiles,
       setPendingCountBatched
     );
-  }, [orchestrator, settings.selectedListId, settings.feedMode, setFeedLoadingSafe, mergeProfiles, setPendingCountBatched, timelineCache, relayKey]);
+  }, [orchestrator, settings.selectedListId, settings.feedMode, setFeedLoadingSafe, mergeProfiles, setPendingCountBatched, timelineCache, relayKey, followKey, followerKey]);
 
   useEffect(() => {
     orchestrator.stop();

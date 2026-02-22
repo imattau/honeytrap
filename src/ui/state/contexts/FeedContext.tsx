@@ -171,18 +171,20 @@ export function FeedProvider({ children }: { children: React.ReactNode }) {
     if (next) setSelfProfile(next);
   }, [feedState.profiles, keys]);
 
-  const filterKey = useMemo(() => {
-    return [
-      settings.feedMode,
-      settings.selectedListId,
-      settings.follows.join(','),
-      followers.join(',')
-    ].join('|');
-  }, [settings.feedMode, settings.selectedListId, settings.follows, followers]);
+  // applySettings does a client-side re-filter of already-loaded events.
+  // It should only fire when the follows/followers lists change while the feed
+  // mode and list ID stay the same. When feedMode or selectedListId change,
+  // subscribeFeed() already restarts the subscription and resets the cache, so
+  // calling applySettings at the same time would cause a redundant intermediate
+  // state (old events briefly filtered by new mode, then immediately cleared).
+  const membershipKey = useMemo(() => {
+    return [settings.follows.join(','), followers.join(',')].join('|');
+  }, [settings.follows, followers]);
 
   useEffect(() => {
     applySettings(settings);
-  }, [filterKey, applySettings]); // Use filterKey to only trigger when actual filters change
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [membershipKey, applySettings]); // Only re-filter on membership changes, not mode/listId changes
 
   const publishPost = useCallback(async (input: PublishInput) => {
     const draft = await publishService.signNote(input);

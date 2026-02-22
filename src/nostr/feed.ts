@@ -87,6 +87,8 @@ export class FeedOrchestrator implements FeedOrchestratorApi {
   ) {
     this.hydrated = false;
     this.pending = [];
+    this.knownIds.clear();
+    this.oldest = undefined;
     this.clearLiveFlushTimer();
     this.lastContext = { follows, followers, feedMode, listId, lists, tags };
     this.lastGetEvents = getEvents;
@@ -125,6 +127,10 @@ export class FeedOrchestrator implements FeedOrchestratorApi {
   stop() {
     this.clearLiveFlushTimer();
     this.liveSubscribed = false;
+    this.knownIds.clear();
+    this.pending = [];
+    this.oldest = undefined;
+    this.hydrated = false;
     this.service.stop();
   }
 
