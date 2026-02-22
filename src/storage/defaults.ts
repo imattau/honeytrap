@@ -9,6 +9,8 @@ export const defaultSettings: AppSettings = {
   follows: [],
   followsUpdatedAt: 0,
   blocked: [],
+  mutedWords: [],
+  mutedHashtags: [],
   nsfwAuthors: [],
   feedMode: 'all',
   mediaRelays: [

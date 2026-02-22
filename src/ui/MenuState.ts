@@ -3,6 +3,8 @@ import type { AppSettings, P2PSettings } from '../storage/types';
 interface MenuStateData {
   relaysInput: string;
   mediaRelaysInput: string;
+  mutedWordsInput: string;
+  mutedHashtagsInput: string;
   torrent: P2PSettings;
   walletLnurl: string;
   walletPresetsInput: string;
@@ -16,6 +18,8 @@ export class MenuState {
     return new MenuState({
       relaysInput: settings.relays.join('\n'),
       mediaRelaysInput: settings.mediaRelays.join('\n'),
+      mutedWordsInput: settings.mutedWords.join('\n'),
+      mutedHashtagsInput: settings.mutedHashtags.map((tag) => `#${tag}`).join('\n'),
       torrent: { ...settings.p2p },
       walletLnurl: settings.wallet?.lnurl ?? '',
       walletPresetsInput: (settings.wallet?.presets ?? []).join(', '),
@@ -29,6 +33,14 @@ export class MenuState {
 
   get mediaRelaysInput() {
     return this.data.mediaRelaysInput;
+  }
+
+  get mutedWordsInput() {
+    return this.data.mutedWordsInput;
+  }
+
+  get mutedHashtagsInput() {
+    return this.data.mutedHashtagsInput;
   }
 
   get torrent() {
@@ -55,6 +67,14 @@ export class MenuState {
     return new MenuState({ ...this.data, mediaRelaysInput: input });
   }
 
+  withMutedWordsInput(input: string): MenuState {
+    return new MenuState({ ...this.data, mutedWordsInput: input });
+  }
+
+  withMutedHashtagsInput(input: string): MenuState {
+    return new MenuState({ ...this.data, mutedHashtagsInput: input });
+  }
+
   withTorrentPatch(patch: Partial<P2PSettings>): MenuState {
     return new MenuState({ ...this.data, torrent: { ...this.data.torrent, ...patch } });
   }
@@ -77,6 +97,14 @@ export class MenuState {
 
   applyMediaRelays(settings: AppSettings): AppSettings {
     return { ...settings, mediaRelays: parseList(this.data.mediaRelaysInput) };
+  }
+
+  applyMuted(settings: AppSettings): AppSettings {
+    return {
+      ...settings,
+      mutedWords: parseMutedWords(this.data.mutedWordsInput),
+      mutedHashtags: parseMutedHashtags(this.data.mutedHashtagsInput)
+    };
   }
 
   applyTorrent(settings: AppSettings): AppSettings {
@@ -108,4 +136,26 @@ function parseNumbers(input: string): number[] {
     .map((value) => Number(value.trim()))
     .filter((value) => Number.isFinite(value) && value > 0);
   return values.length > 0 ? values : [];
+}
+
+function parseMutedWords(input: string): string[] {
+  return Array.from(
+    new Set(
+      input
+        .split(/\n|,/)
+        .map((term) => term.trim().toLowerCase())
+        .filter(Boolean)
+    )
+  );
+}
+
+function parseMutedHashtags(input: string): string[] {
+  return Array.from(
+    new Set(
+      input
+        .split(/\n|,/)
+        .map((term) => term.trim().toLowerCase().replace(/^#/, ''))
+        .filter(Boolean)
+    )
+  );
 }

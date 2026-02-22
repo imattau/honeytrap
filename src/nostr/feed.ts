@@ -37,7 +37,8 @@ export class FeedOrchestrator implements FeedOrchestratorApi {
     private isBlocked?: (pubkey: string) => boolean,
     private onEventAssist?: (event: NostrEvent) => void,
     cache?: NostrCache,
-    verifier?: EventVerifier
+    verifier?: EventVerifier,
+    private isMuted?: (event: NostrEvent) => boolean
   ) {
     this.cache = cache;
     this.verifier = verifier ?? new AsyncEventVerifier();
@@ -109,6 +110,7 @@ export class FeedOrchestrator implements FeedOrchestratorApi {
         if (!cached || cached.length === 0) return;
         const filtered = cached.filter((event) => {
           if (this.isBlocked?.(event.pubkey)) return false;
+          if (this.isMuted?.(event)) return false;
           if (authorSet && !authorSet.has(event.pubkey)) return false;
           if (normalizedTags.length > 0 && !matchesTag(event, normalizedTags)) return false;
           return true;
@@ -171,7 +173,9 @@ export class FeedOrchestrator implements FeedOrchestratorApi {
     if (!this.oldest) return;
     const authors = resolveAuthors({ follows, followers, feedMode, listId, lists });
     const older = await this.nostr.fetchOlderTimeline({ until: this.oldest - 1, authors, tags, limit: 40 });
-    const unique = older.filter((event) => !this.knownIds.has(event.id) && !this.isBlocked?.(event.pubkey));
+    const unique = older.filter(
+      (event) => !this.knownIds.has(event.id) && !this.isBlocked?.(event.pubkey) && !this.isMuted?.(event)
+    );
     if (unique.length === 0) return;
     unique.forEach((event) => this.knownIds.add(event.id));
     unique.forEach((event) => this.markTransport(event));
@@ -288,6 +292,7 @@ export class FeedOrchestrator implements FeedOrchestratorApi {
     onPending?: (count: number) => void
   ) {
     if (this.isBlocked?.(event.pubkey)) return;
+    if (this.isMuted?.(event)) return;
     if (authorSet && !authorSet.has(event.pubkey)) return;
     if (normalizedTags.length > 0 && !matchesTag(event, normalizedTags)) return;
     if (this.knownIds.has(event.id)) return;
@@ -349,7 +354,7 @@ export class FeedOrchestrator implements FeedOrchestratorApi {
   private flush(existing: NostrEvent[]): NostrEvent[] {
     if (this.pending.length === 0) return existing;
     const incoming = this.pending.splice(0, this.pending.length)
-      .filter((event) => !this.isBlocked?.(event.pubkey));
+      .filter((event) => !this.isBlocked?.(event.pubkey) && !this.isMuted?.(event));
     if (incoming.length > 0) {
       this.cache?.setEvents(incoming).catch(() => null);
     }

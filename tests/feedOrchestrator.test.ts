@@ -68,6 +68,35 @@ describe('FeedOrchestrator filtering', () => {
     expect(updates.length).toBe(0);
   });
 
+  it('ignores events matched by muted callback', () => {
+    const service = new FakeService();
+    const client = new FakeClient();
+    const isMuted = vi.fn((event: NostrEvent) => event.content.toLowerCase().includes('spoiler'));
+    const orchestrator = new FeedOrchestrator(
+      client as any,
+      service as any,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      isMuted
+    );
+    const updates: NostrEvent[][] = [];
+
+    orchestrator.subscribe(
+      { follows: ['alice'], followers: [], feedMode: 'follows' },
+      () => [],
+      (next) => updates.push(next),
+      () => null
+    );
+
+    service.onEvent?.(makeEvent('1', 'alice', { content: 'spoiler text' }));
+    vi.runAllTimers();
+
+    expect(updates.length).toBe(0);
+  });
+
   it('invokes event assist for accepted events', () => {
     (globalThis as any).window = {
       setTimeout: (fn: () => void, ms?: number) => setTimeout(fn, ms),
@@ -259,7 +288,8 @@ describe('FeedOrchestrator filtering', () => {
     const cache = {
       getRecentEvents: vi.fn(async () => [makeEvent('cached-1', 'alice')]),
       setRecentEvents: vi.fn(async () => undefined),
-      setEvents: vi.fn(async () => undefined)
+      setEvents: vi.fn(async () => undefined),
+      setProfile: vi.fn(async () => undefined)
     };
     const orchestrator = new FeedOrchestrator(client as any, service as any, undefined, undefined, undefined, cache as any);
     const onProfiles = vi.fn();

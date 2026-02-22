@@ -4,7 +4,7 @@ import type { AppSettings } from '../../storage/types';
 import type { NostrClient } from '../../nostr/client';
 import { FeedOrchestrator } from '../../nostr/feed';
 import type { TransportStore } from '../../nostr/transport';
-import { SocialGraph } from '../../nostr/social';
+import { SocialGraph, createMutedMatcher } from '../../nostr/social';
 import type { NostrCache } from '../../nostr/cache';
 import type { EventVerifier } from '../../nostr/eventVerifier';
 import { FeedTimelineCache } from '../../nostr/feedTimelineCache';
@@ -45,10 +45,16 @@ export function useFeedState({
   // Use refs for functions that might change due to unrelated settings updates
   const onEventAssistRef = useRef(onEventAssist);
   const isBlockedRef = useRef(isBlocked);
+  const isMuted = useMemo(
+    () => createMutedMatcher(settings),
+    [settings.mutedWords, settings.mutedHashtags]
+  );
+  const isMutedRef = useRef(isMuted);
   useEffect(() => {
     onEventAssistRef.current = onEventAssist;
     isBlockedRef.current = isBlocked;
-  }, [onEventAssist, isBlocked]);
+    isMutedRef.current = isMuted;
+  }, [onEventAssist, isBlocked, isMuted]);
 
   const orchestrator = useMemo(
     () => new FeedOrchestrator(
@@ -58,7 +64,8 @@ export function useFeedState({
       (pk) => isBlockedRef.current(pk), 
       (ev) => onEventAssistRef.current?.(ev), 
       cache, 
-      verifier
+      verifier,
+      (ev) => isMutedRef.current(ev)
     ),
     [nostr, feedService, transportStore, cache, verifier]
   );

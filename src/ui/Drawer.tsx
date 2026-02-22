@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { flushSync } from 'react-dom';
-import { Bell, List, LogOut, PencilLine, Search, UserCircle, X } from 'lucide-react';
+import { Bell, Filter, List, LogOut, PencilLine, Search, UserCircle, X } from 'lucide-react';
 import { useAppState } from './AppState';
 import { MenuState } from './MenuState';
 import { MediaRelaysSection } from './menu/MediaRelaysSection';
@@ -39,7 +39,7 @@ export function Drawer() {
   } = useAppState();
 
   const [open, setOpen] = useState(false);
-  const [savedSection, setSavedSection] = useState<'relays' | 'media' | 'torrent' | 'wallet' | null>(null);
+  const [savedSection, setSavedSection] = useState<'relays' | 'media' | 'muted' | 'torrent' | 'wallet' | null>(null);
   const [isWide, setIsWide] = useState(false);
   const [isTouch, setIsTouch] = useState(false);
   const [headerHidden, setHeaderHidden] = useState(false);
@@ -188,6 +188,11 @@ export function Drawer() {
   const handleSaveWallet = () => {
     setSettings(menuState.applyWallet(settings));
     setSavedSection('wallet');
+  };
+
+  const handleSaveMuted = () => {
+    setSettings(menuState.applyMuted(settings));
+    setSavedSection('muted');
   };
 
   const mobileProfileName = isAuthed
@@ -380,6 +385,34 @@ export function Drawer() {
             {mediaRelayList.length > 0 && (
               <div className="menu-sub">NIP-51 media relays loaded ({mediaRelayList.length})</div>
             )}
+            <MenuSection title="Content Filters" icon={<Filter size={16} />}>
+              <div className="menu-row">
+                <label className="menu-label">Muted words</label>
+                <textarea
+                  className="menu-textarea"
+                  rows={3}
+                  value={menuState.mutedWordsInput}
+                  onChange={(event) => setMenuState(menuState.withMutedWordsInput(event.target.value))}
+                  placeholder="one per line, e.g. politics"
+                />
+              </div>
+              <div className="menu-row">
+                <label className="menu-label">Muted hashtags</label>
+                <textarea
+                  className="menu-textarea"
+                  rows={3}
+                  value={menuState.mutedHashtagsInput}
+                  onChange={(event) => setMenuState(menuState.withMutedHashtagsInput(event.target.value))}
+                  placeholder="#nsfw, #spoiler"
+                />
+              </div>
+              <div className="menu-sub">
+                Matching is case-insensitive and applies to live feed updates.
+              </div>
+              <button className={`menu-button ${savedSection === 'muted' ? 'menu-button--saved' : ''}`} onClick={handleSaveMuted}>
+                <Filter size={14} /> Save filters
+              </button>
+            </MenuSection>
             <NostrRelaysSection
               value={menuState.relaysInput}
               onChange={(value) => setMenuState(menuState.withRelaysInput(value))}

@@ -26,6 +26,8 @@ export interface AppSettings {
   selectedListId?: string;
   follows: string[];
   blocked: string[];
+  mutedWords: string[];
+  mutedHashtags: string[];
   nsfwAuthors: string[];
   feedMode: 'all' | 'follows' | 'followers' | 'both';
   mediaRelays: string[];
