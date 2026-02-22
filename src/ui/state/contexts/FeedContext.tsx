@@ -56,7 +56,19 @@ interface FeedContextValue {
   fetchEventById: (id: string) => Promise<NostrEvent | undefined>;
 }
 
+interface FeedActionsContextValue {
+  selectEvent: (event?: NostrEvent) => void;
+  selectAuthor: (pubkey?: string) => void;
+  publishRepost: (event: NostrEvent) => Promise<void>;
+  publishReaction: (event: NostrEvent, reaction?: string) => Promise<void>;
+  shareEvent: (event: NostrEvent) => Promise<string>;
+  hydrateProfiles: (pubkeys: string[]) => Promise<void>;
+  findEventById: (id: string) => NostrEvent | undefined;
+}
+
 const FeedContext = createContext<FeedContextValue | undefined>(undefined);
+const FeedActionsContext = createContext<FeedActionsContextValue | undefined>(undefined);
+const FeedProfilesContext = createContext<Record<string, ProfileMetadata>>({});
 const FeedControlState = createContext<{ setPaused: (value: boolean) => void } | undefined>(undefined);
 const PROFILE_HYDRATION_RETRY_MS = 8_000;
 
@@ -68,19 +80,31 @@ export function FeedProvider({ children }: { children: React.ReactNode }) {
   const { followers, isBlocked } = useSocial();
   const { assistEvent, seedEvent } = useP2P();
 
+  // Basic hooks first
+  const [selfProfile, setSelfProfile] = useState<ProfileMetadata | undefined>(undefined);
   const isBlockedRef = useRef(isBlocked);
+  const onEventAssistRef = useRef(assistEvent);
+  const seedEventRef = useRef(seedEvent);
+  const profilesRef = useRef<Record<string, ProfileMetadata>>({});
+  const profileHydrationInflightRef = useRef<Set<string>>(new Set());
+  const profileHydrationAttemptRef = useRef<Map<string, number>>(new Map());
+  const mergeProfilesRef = useRef<((profiles: Record<string, ProfileMetadata>) => void) | null>(null);
+
+  // Update refs in effects
   useEffect(() => { isBlockedRef.current = isBlocked; }, [isBlocked]);
+  useEffect(() => { onEventAssistRef.current = assistEvent; }, [assistEvent]);
+  useEffect(() => { seedEventRef.current = seedEvent; }, [seedEvent]);
 
   const onEventAssist = useCallback(async (event: NostrEvent) => {
-    await assistEvent(event);
+    await onEventAssistRef.current(event);
     // Gap 3: seed relay-received events that have no bt tag, when opt-in is enabled
     if (settings.p2p.enabled && settings.p2p.seedRelayEvents) {
       const hasBtTag = event.tags.some((t) => t[0] === 'bt');
       if (!hasBtTag) {
-        seedEvent(event).catch(() => undefined);
+        seedEventRef.current(event).catch(() => undefined);
       }
     }
-  }, [assistEvent, seedEvent, settings.p2p.enabled, settings.p2p.seedRelayEvents]);
+  }, [settings.p2p.enabled, settings.p2p.seedRelayEvents]);
 
   const feedState = useFeedState({
     nostr,
@@ -94,12 +118,13 @@ export function FeedProvider({ children }: { children: React.ReactNode }) {
     verifier
   });
 
-  const [selfProfile, setSelfProfile] = useState<ProfileMetadata | undefined>(undefined);
-  const profilesRef = useRef(feedState.profiles);
+  const { applySettings, setPaused: setPausedRaw, mergeProfiles: mergeProfilesRaw, findEventById: findEventByIdRaw } = feedState;
+  
+  // Sync the ref with latest profiles from state
   profilesRef.current = feedState.profiles;
-
-  const profileHydrationInflightRef = useRef<Set<string>>(new Set());
-  const profileHydrationAttemptRef = useRef<Map<string, number>>(new Map());
+  
+  // Update the mergeProfiles ref whenever it changes
+  useEffect(() => { mergeProfilesRef.current = mergeProfilesRaw; }, [mergeProfilesRaw]);
 
   const authorService = useMemo(() => new AuthorService(nostr, transportStore, (pk) => isBlockedRef.current(pk), verifier), [nostr, transportStore, verifier]);
   const hashtagService = useMemo(() => new HashtagService(nostr, transportStore, (pk) => isBlockedRef.current(pk), verifier), [nostr, transportStore, verifier]);
@@ -113,41 +138,49 @@ export function FeedProvider({ children }: { children: React.ReactNode }) {
       setSelfProfile(undefined);
       return;
     }
-    feedState.orchestrator.ensureProfile(keys.npub, feedState.mergeProfiles);
-  }, [keys, feedState.orchestrator, feedState.mergeProfiles]);
+    feedState.orchestrator.ensureProfile(keys.npub, (p) => mergeProfilesRef.current?.(p));
+  }, [keys, feedState.orchestrator]);
 
   useEffect(() => {
     const next = feedState.profiles[keys?.npub ?? ''];
     if (next) setSelfProfile(next);
   }, [feedState.profiles, keys]);
 
-  const { applySettings } = feedState;
+  const filterKey = useMemo(() => {
+    return [
+      settings.feedMode,
+      settings.selectedListId,
+      settings.follows.join(','),
+      followers.join(',')
+    ].join('|');
+  }, [settings.feedMode, settings.selectedListId, settings.follows, followers]);
+
   useEffect(() => {
     applySettings(settings);
-  }, [settings, applySettings]);
+  }, [filterKey, applySettings]); // Use filterKey to only trigger when actual filters change
 
   const publishPost = useCallback(async (input: PublishInput) => {
     const draft = await publishService.signNote(input);
-    const p2p = await seedEvent(draft).catch(() => undefined);
+    const p2p = await seedEventRef.current(draft).catch(() => undefined);
     const extraTags = p2p
       ? [['bt', p2p.bt, 'event'], ...(p2p.sha256 ? [['x', `sha256:${p2p.sha256}`, 'event']] : [])]
       : [];
     const event = extraTags.length > 0 ? await publishService.signNote(input, extraTags) : draft;
     await publishService.publishSigned(event);
     return event;
-  }, [publishService, seedEvent]);
+  }, [publishService]);
 
   const publishReply = useCallback(async (input: PublishInput, replyTo: NostrEvent) => {
     const replyInput = { ...input, replyTo };
     const draft = await publishService.signNote(replyInput);
-    const p2p = await seedEvent(draft).catch(() => undefined);
+    const p2p = await seedEventRef.current(draft).catch(() => undefined);
     const extraTags = p2p
       ? [['bt', p2p.bt, 'event'], ...(p2p.sha256 ? [['x', `sha256:${p2p.sha256}`, 'event']] : [])]
       : [];
     const event = extraTags.length > 0 ? await publishService.signNote(replyInput, extraTags) : draft;
     await publishService.publishSigned(event);
     return event;
-  }, [publishService, seedEvent]);
+  }, [publishService]);
 
   const publishRepost = useCallback(async (event: NostrEvent) => {
     const signed = await signer.signEvent({
@@ -227,11 +260,11 @@ export function FeedProvider({ children }: { children: React.ReactNode }) {
     missing.forEach((pk) => profileHydrationAttemptRef.current.set(pk, now));
     try {
       const fetched = await nostr.fetchProfiles(missing);
-      feedState.mergeProfiles(fetched);
+      mergeProfilesRef.current?.(fetched);
     } finally {
       missing.forEach((pubkey) => profileHydrationInflightRef.current.delete(pubkey));
     }
-  }, [feedState, nostr]);
+  }, [nostr]);
 
   const value: FeedContextValue = useMemo(() => ({
     events: feedState.events,
@@ -242,7 +275,7 @@ export function FeedProvider({ children }: { children: React.ReactNode }) {
     selectedAuthor: feedState.selectedAuthor,
     selfProfile,
     paused: feedState.paused,
-    setPaused: feedState.setPaused,
+    setPaused: setPausedRaw,
     selectEvent: feedState.selectEvent,
     selectAuthor: feedState.selectAuthor,
     loadOlder: feedState.loadOlder,
@@ -260,11 +293,11 @@ export function FeedProvider({ children }: { children: React.ReactNode }) {
     subscribeMentions: (pk: string, onE: any, onC: any) => nostr.subscribeMentions(pk, onE, onC),
     fetchLists: (pk: string) => nostr.fetchLists(pk),
     publishPeopleList: async (i: any) => { await peopleListService.publish(i); },
-    mergeProfiles: feedState.mergeProfiles,
+    mergeProfiles: (p: any) => mergeProfilesRef.current?.(p),
     hydrateProfiles,
     authorService,
     hashtagService,
-    findEventById: feedState.findEventById,
+    findEventById: findEventByIdRaw,
     fetchEventById: (id: string) => nostr.fetchEventById(id)
   }), [
     feedState.events,
@@ -279,8 +312,7 @@ export function FeedProvider({ children }: { children: React.ReactNode }) {
     feedState.selectAuthor,
     feedState.loadOlder,
     feedState.flushPending,
-    feedState.mergeProfiles,
-    feedState.findEventById,
+    findEventByIdRaw,
     selfProfile,
     authorService,
     hashtagService,
@@ -296,16 +328,38 @@ export function FeedProvider({ children }: { children: React.ReactNode }) {
     hydrateProfiles
   ]);
 
+  const actionsValue = useMemo<FeedActionsContextValue>(() => ({
+    selectEvent: feedState.selectEvent,
+    selectAuthor: feedState.selectAuthor,
+    publishRepost,
+    publishReaction,
+    shareEvent,
+    hydrateProfiles,
+    findEventById: findEventByIdRaw
+  }), [
+    feedState.selectEvent,
+    feedState.selectAuthor,
+    publishRepost,
+    publishReaction,
+    shareEvent,
+    hydrateProfiles,
+    findEventByIdRaw
+  ]);
+
   const feedControlValue = useMemo(
-    () => ({ setPaused: feedState.setPaused }),
-    [feedState.setPaused]
+    () => ({ setPaused: setPausedRaw }),
+    [setPausedRaw]
   );
 
   return (
     <FeedControlState.Provider value={feedControlValue}>
-      <FeedContext.Provider value={value}>
-        {children}
-      </FeedContext.Provider>
+      <FeedActionsContext.Provider value={actionsValue}>
+        <FeedProfilesContext.Provider value={feedState.profiles}>
+          <FeedContext.Provider value={value}>
+            {children}
+          </FeedContext.Provider>
+        </FeedProfilesContext.Provider>
+      </FeedActionsContext.Provider>
     </FeedControlState.Provider>
   );
 }
@@ -313,6 +367,21 @@ export function FeedProvider({ children }: { children: React.ReactNode }) {
 export function useFeed() {
   const context = useContext(FeedContext);
   if (!context) throw new Error('useFeed must be used within a FeedProvider');
+  return context;
+}
+
+export function useProfile(pubkey?: string) {
+  const profiles = useContext(FeedProfilesContext);
+  return useMemo(() => (pubkey ? profiles[pubkey] : undefined), [profiles, pubkey]);
+}
+
+export function useProfiles() {
+  return useContext(FeedProfilesContext);
+}
+
+export function useFeedActions() {
+  const context = useContext(FeedActionsContext);
+  if (!context) throw new Error('useFeedActions must be used within a FeedProvider');
   return context;
 }
 
