@@ -40,6 +40,9 @@ export const PostHeader: React.FC<PostHeaderProps> = ({
             src={authorProfile.picture}
             alt="avatar"
             className="post-avatar"
+            width={44}
+            height={44}
+            decoding="async"
             onClick={onAuthorClick}
           />
         ) : (
@@ -47,6 +50,9 @@ export const PostHeader: React.FC<PostHeaderProps> = ({
             src={fallbackAvatar}
             alt="avatar"
             className="post-avatar fallback"
+            width={44}
+            height={44}
+            decoding="async"
             onClick={onAuthorClick}
           />
         )}

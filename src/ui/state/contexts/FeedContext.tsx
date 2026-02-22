@@ -15,6 +15,7 @@ import { PeopleListService } from '../../../nostr/lists';
 import { encodeNeventUri } from '../../../nostr/uri';
 import { copyToClipboard } from '../../utils';
 import type { NostrEvent, ProfileMetadata, ListDescriptor } from '../../../nostr/types';
+import { ProfileStore, useAuthorProfile, useAllProfiles } from '../ProfileStore';
 
 interface FeedContextValue {
   events: NostrEvent[];
@@ -68,8 +69,17 @@ interface FeedActionsContextValue {
 
 const FeedContext = createContext<FeedContextValue | undefined>(undefined);
 const FeedActionsContext = createContext<FeedActionsContextValue | undefined>(undefined);
+// Legacy whole-map context kept for components that need all profiles (PostContent, etc.)
 const FeedProfilesContext = createContext<Record<string, ProfileMetadata>>({});
 const FeedControlState = createContext<{ setPaused: (value: boolean) => void } | undefined>(undefined);
+
+// Stable ref context: consumers that only need to read the latest profiles without
+// subscribing to every profile change use this to avoid re-renders.
+const FeedProfilesRefContext = createContext<React.MutableRefObject<Record<string, ProfileMetadata>>>({ current: {} });
+
+// ProfileStore context: enables per-pubkey subscriptions (no re-render on unrelated profiles)
+const ProfileStoreContext = createContext<ProfileStore | null>(null);
+
 const PROFILE_HYDRATION_RETRY_MS = 8_000;
 
 export function FeedProvider({ children }: { children: React.ReactNode }) {
@@ -119,12 +129,27 @@ export function FeedProvider({ children }: { children: React.ReactNode }) {
   });
 
   const { applySettings, setPaused: setPausedRaw, mergeProfiles: mergeProfilesRaw, findEventById: findEventByIdRaw } = feedState;
-  
+
   // Sync the ref with latest profiles from state
   profilesRef.current = feedState.profiles;
-  
+
   // Update the mergeProfiles ref whenever it changes
   useEffect(() => { mergeProfilesRef.current = mergeProfilesRaw; }, [mergeProfilesRaw]);
+
+  // Stable ref to profiles — lets components read the latest without subscribing
+  const profilesStableRef = useRef<Record<string, ProfileMetadata>>(feedState.profiles);
+  profilesStableRef.current = feedState.profiles;
+
+  // ProfileStore: enables per-pubkey subscriptions so PostCard only re-renders
+  // when its own author's profile changes, not on every profile load.
+  const profileStore = useMemo(() => new ProfileStore(), []);
+
+  // Keep the ProfileStore in sync with the feed state profiles.
+  // feedState.profiles only changes when a profile actually changed (mergeProfiles
+  // does equality checking), so this effect fires minimally.
+  useEffect(() => {
+    profileStore.merge(feedState.profiles);
+  }, [feedState.profiles, profileStore]);
 
   const authorService = useMemo(() => new AuthorService(nostr, transportStore, (pk) => isBlockedRef.current(pk), verifier), [nostr, transportStore, verifier]);
   const hashtagService = useMemo(() => new HashtagService(nostr, transportStore, (pk) => isBlockedRef.current(pk), verifier), [nostr, transportStore, verifier]);
@@ -354,11 +379,15 @@ export function FeedProvider({ children }: { children: React.ReactNode }) {
   return (
     <FeedControlState.Provider value={feedControlValue}>
       <FeedActionsContext.Provider value={actionsValue}>
-        <FeedProfilesContext.Provider value={feedState.profiles}>
-          <FeedContext.Provider value={value}>
-            {children}
-          </FeedContext.Provider>
-        </FeedProfilesContext.Provider>
+        <ProfileStoreContext.Provider value={profileStore}>
+          <FeedProfilesRefContext.Provider value={profilesStableRef}>
+            <FeedProfilesContext.Provider value={feedState.profiles}>
+              <FeedContext.Provider value={value}>
+                {children}
+              </FeedContext.Provider>
+            </FeedProfilesContext.Provider>
+          </FeedProfilesRefContext.Provider>
+        </ProfileStoreContext.Provider>
       </FeedActionsContext.Provider>
     </FeedControlState.Provider>
   );
@@ -370,13 +399,43 @@ export function useFeed() {
   return context;
 }
 
+/**
+ * Subscribe to a single author's profile via the ProfileStore. The component
+ * ONLY re-renders when that specific pubkey's profile changes — not when any
+ * other profile loads. This eliminates cross-card flicker in the feed.
+ */
 export function useProfile(pubkey?: string) {
-  const profiles = useContext(FeedProfilesContext);
-  return useMemo(() => (pubkey ? profiles[pubkey] : undefined), [profiles, pubkey]);
+  const store = useContext(ProfileStoreContext);
+  // Always call both hooks unconditionally (Rules of Hooks).
+  // useAuthorProfile is a no-op (returns undefined and subscribes to nothing)
+  // when store is null, so the legacyProfile path is used instead.
+  const storeProfile = useAuthorProfile(store, pubkey);
+  const legacyProfiles = useContext(FeedProfilesContext);
+  const legacyProfile = useMemo(
+    () => (pubkey ? legacyProfiles[pubkey] : undefined),
+    [legacyProfiles, pubkey]
+  );
+  return store ? storeProfile : legacyProfile;
 }
 
+/**
+ * Subscribe to the full profiles map. Re-renders on any profile change.
+ * Use sparingly — prefer useProfile for per-card subscriptions.
+ */
 export function useProfiles() {
-  return useContext(FeedProfilesContext);
+  const store = useContext(ProfileStoreContext);
+  const storeProfiles = useAllProfiles(store);
+  const legacyProfiles = useContext(FeedProfilesContext);
+  return store ? storeProfiles : legacyProfiles;
+}
+
+/**
+ * Returns a stable ref to the profiles map. Reading `.current[pubkey]` gives the
+ * latest profile without subscribing to every profile update. Use this in components
+ * that should NOT re-render when unrelated profiles load.
+ */
+export function useProfilesRef() {
+  return useContext(FeedProfilesRefContext);
 }
 
 export function useFeedActions() {

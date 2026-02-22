@@ -4,7 +4,6 @@ import type { NostrEvent, ProfileMetadata } from '../nostr/types';
 import { extractMedia } from '../nostr/media';
 import { extractLinks } from '../nostr/links';
 import { extractEmojiMap, parseLongFormTags, stripInvisibleSeparators, tokenizeLineWithEmojiAndHashtags } from '../nostr/utils';
-import { useAppState } from './AppState';
 import { useNavigate } from 'react-router-dom';
 import { flushSync } from 'react-dom';
 import { decodeNostrUri, encodeNpubUri, splitNostrContent } from '../nostr/uri';
@@ -21,6 +20,11 @@ import { MediaLightbox } from './MediaLightbox';
 import { LinkPreviewCard } from './LinkPreviewCard';
 import { PostContextMenu } from './PostContextMenu';
 import { Card } from './Card';
+
+import { useSocial } from './state/contexts/SocialContext';
+import { useFeedActions, useProfile, useProfiles, useProfilesRef } from './state/contexts/FeedContext';
+import { useP2P } from './state/contexts/P2PContext';
+import { useTransport } from './state/contexts/TransportContext';
 
 interface PostCardProps {
   event: NostrEvent;
@@ -39,7 +43,7 @@ interface PostCardProps {
 
 export const PostCard = React.memo(function PostCard({
   event,
-  profile,
+  profile: profileProp,
   onSelect,
   onOpenThread,
   onReply,
@@ -52,23 +56,22 @@ export const PostCard = React.memo(function PostCard({
   actionsPosition = 'bottom'
 }: PostCardProps) {
   const {
-    profiles,
-    findEventById,
     selectEvent,
     selectAuthor,
-    transportStore,
-    loadMedia,
-    isFollowed,
-    isBlocked,
-    isNsfwAuthor,
-    toggleFollow,
-    toggleBlock,
-    toggleNsfwAuthor,
     publishRepost,
     publishReaction,
     shareEvent,
     hydrateProfiles
-  } = useAppState();
+  } = useFeedActions();
+
+  // Subscribe only to this author's profile to avoid re-rendering on every
+  // unrelated profile load. useProfile subscribes to the full profiles context.
+  const profileFromContext = useProfile(event.pubkey);
+  const authorProfile = profileProp ?? profileFromContext;
+
+  const { transportStore } = useTransport();
+  const { loadMedia } = useP2P();
+  const { isFollowed, isBlocked, isNsfwAuthor, toggleFollow, toggleBlock, toggleNsfwAuthor } = useSocial();
 
   const [expanded] = useState(false);
   const [revealed, setRevealed] = useState(false);
@@ -89,7 +92,6 @@ export const PostCard = React.memo(function PostCard({
   const longForm = useMemo(() => (isLongForm ? parseLongFormTags(event.tags) : undefined), [event.tags, isLongForm]);
   const nsfwAuthor = isNsfwAuthor(event.pubkey);
   const isSensitive = useMemo(() => isSensitiveEvent(event) || nsfwAuthor, [event, nsfwAuthor]);
-  const authorProfile = useMemo(() => profile ?? resolveProfile(profiles, event.pubkey), [event.pubkey, profile, profiles]);
   const isExpanded = forceExpanded || expanded;
   const hasMore = showMoreButton && !forceExpanded && (event.content.length > 320 || media.length > 1 || links.length > 1);
   const visibleMedia = isExpanded || !showMoreButton ? media : media.slice(0, 1);
@@ -272,8 +274,6 @@ export const PostCard = React.memo(function PostCard({
                 content={event.content}
                 mediaUrls={media.map((m) => m.url)}
                 emojiMap={emojiMap}
-                findEventById={findEventById}
-                profiles={profiles}
                 onTagClick={(tag) => flushSync(() => navigate(`/tag/${encodeURIComponent(tag)}`))}
                 onAuthorClick={(pubkey) => {
                   selectAuthor(pubkey);
@@ -381,8 +381,6 @@ function PostContent({
   content,
   mediaUrls,
   emojiMap,
-  findEventById,
-  profiles,
   onTagClick,
   onAuthorClick,
   onEventClick
@@ -390,12 +388,12 @@ function PostContent({
   content: string;
   mediaUrls: string[];
   emojiMap: Record<string, string>;
-  findEventById: (id: string) => NostrEvent | undefined;
-  profiles: Record<string, ProfileMetadata>;
   onTagClick: (tag: string) => void;
   onAuthorClick: (pubkey: string) => void;
   onEventClick: (event: NostrEvent) => void;
 }) {
+  const profiles = useProfiles();
+  const { findEventById } = useFeedActions();
   const cleaned = stripInvisibleSeparators(stripMediaUrls(content, mediaUrls));
   const parts = splitNostrContent(cleaned);
 

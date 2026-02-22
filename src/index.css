@@ -109,11 +109,62 @@
     @apply flex justify-center py-3 max-w-full w-full;
   }
 
+  .feed-grid {
+    display: grid;
+    grid-template-columns: repeat(1, minmax(0, 1fr));
+    gap: 16px;
+    width: 100%;
+    padding: 0 4px;
+  }
+
+  @media (min-width: 768px) {
+    .feed-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
+  @media (min-width: 1200px) {
+    .feed-grid {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+  }
+
+  .feed-grid-item {
+    @apply flex justify-center w-full;
+    /* Isolate each item's layout so height changes don't propagate to sibling
+       items or the Virtuoso scroller, preventing scroll-position jumps. */
+    contain: layout;
+  }
+
   .post-card {
-    @apply w-[min(720px,92vw)] max-w-[calc(100vw-32px)] box-border mx-auto rounded-3xl p-[20px_22px] shadow-[0_24px_50px_rgba(0,0,0,0.35)] grid gap-4 [backface-visibility:hidden] [transform:translateZ(0)];
+    @apply w-full max-w-full box-border mx-auto rounded-3xl p-[20px_22px] shadow-[0_24px_50px_rgba(0,0,0,0.35)] grid gap-4 [backface-visibility:hidden] [transform:translateZ(0)];
     background-color: #11151b;
     border: 1px solid #1b222c;
-    contain: paint;
+    /* Use layout+style containment only — avoid paint containment which can clip
+       shadows, and avoid content-visibility:auto which causes scroll jumps when
+       the browser's intrinsic-size estimate (400px) differs from actual height. */
+    contain: layout style;
+    min-height: 200px;
+  }
+
+  .post-card--placeholder {
+    min-height: 240px;
+    background: linear-gradient(110deg, #10161d 10%, #17202a 45%, #10161d 80%);
+    background-size: 220% 100%;
+    border-color: #1f2a36;
+    animation: feed-placeholder-scan 1.2s ease-in-out infinite;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .post-card--placeholder {
+      animation: none;
+    }
+  }
+
+  @media (max-width: 767px) {
+    .post-card {
+      @apply w-[min(720px,92vw)] max-w-[calc(100vw-32px)];
+    }
   }
 
   .post-card.depth-1 { background-color: #111820; }
@@ -292,6 +343,7 @@
     @apply grid gap-1 p-3 px-3.5 rounded-2xl text-[#d7e0ed] no-underline;
     background-color: rgba(11, 13, 16, 0.6);
     border: 1px solid #1b222c;
+    min-height: 60px;
   }
 
   .link-host {
@@ -993,9 +1045,15 @@
 
   /* ── P2P Status Bar ─────────────────────────────────────────── */
   .p2p-bar {
-    @apply fixed top-2.5 right-4 z-[20] flex items-center gap-2 p-1 px-2.5 rounded-[20px] text-[11px] font-mono tracking-[0.04em] backdrop-blur-sm transition-all duration-300 pointer-events-none select-none;
+    @apply fixed bottom-[calc(16px+env(safe-area-inset-bottom))] left-4 z-[40] flex items-center gap-2 p-1 px-2.5 rounded-[20px] text-[11px] font-mono tracking-[0.04em] backdrop-blur-sm transition-all duration-300 pointer-events-none select-none;
     background: rgba(11, 13, 16, 0.85);
     border: 1px solid rgba(109, 214, 255, 0.12);
+  }
+
+  @media (min-width: 1200px) {
+    .p2p-bar {
+      @apply left-[336px];
+    }
   }
 
   .p2p-bar--dormant {
@@ -1060,11 +1118,17 @@
   }
 
   .feed-toolbar {
-    @apply relative m-[12px_auto_4px] w-[min(760px,calc(100vw-20px))] grid gap-2 z-[8];
+    @apply relative m-[12px_auto_8px] w-full max-w-[calc(100vw-32px)] flex flex-wrap items-center justify-between gap-3 z-[8] px-4;
+  }
+
+  @media (min-width: 1200px) {
+    .feed-toolbar {
+      @apply max-w-[1200px];
+    }
   }
 
   .feed-mode-switcher {
-    @apply flex gap-1.5 flex-wrap;
+    @apply flex items-center gap-1.5 flex-wrap;
   }
 
   .feed-mode-pill,
@@ -1313,4 +1377,9 @@
   0% { opacity: 0.35; }
   50% { opacity: 1; }
   100% { opacity: 0.35; }
+}
+
+@keyframes feed-placeholder-scan {
+  0% { background-position: 0% 0%; }
+  100% { background-position: 200% 0%; }
 }

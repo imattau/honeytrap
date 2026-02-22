@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { isVideoUrl } from './utils';
 import type { MediaSource } from '../nostr/media';
 
@@ -24,7 +24,10 @@ export const PostMediaItem: React.FC<PostMediaItemProps> = ({
 }) => {
   const isVideo = isVideoUrl(item.url);
   const [src, setSrc] = useState(item.url);
-  const [loaded, setLoaded] = useState(false);
+  // Track loaded state per src so switching src doesn't reset the shimmer
+  // back to unloaded for a URL the browser already has decoded.
+  const loadedSrcs = useRef<Set<string>>(new Set());
+  const [loaded, setLoaded] = useState(() => loadedSrcs.current.has(item.url));
 
   useEffect(() => {
     let active = true;
@@ -36,13 +39,25 @@ export const PostMediaItem: React.FC<PostMediaItemProps> = ({
     })
       .then((result) => {
         if (!active) return;
-        if (result.url !== item.url) setSrc(result.url);
+        if (result.url !== item.url) {
+          // Only swap src if the resolved URL differs (P2P blob URL).
+          // Preserve loaded state if the new src was already decoded.
+          setSrc(result.url);
+          if (loadedSrcs.current.has(result.url)) {
+            setLoaded(true);
+          }
+        }
       })
       .catch(() => null);
     return () => {
       active = false;
     };
   }, [authorPubkey, eventId, isVideo, item.magnet, item.sha256, item.url, loadMedia]);
+
+  const handleLoaded = () => {
+    loadedSrcs.current.add(src);
+    setLoaded(true);
+  };
 
   return (
     <button
@@ -58,7 +73,7 @@ export const PostMediaItem: React.FC<PostMediaItemProps> = ({
           src={src}
           controls
           className="post-media-item"
-          onLoadedData={() => setLoaded(true)}
+          onLoadedData={handleLoaded}
         />
       ) : (
         <img
@@ -67,7 +82,7 @@ export const PostMediaItem: React.FC<PostMediaItemProps> = ({
           className="post-media-item"
           loading="lazy"
           decoding="async"
-          onLoad={() => setLoaded(true)}
+          onLoad={handleLoaded}
         />
       )}
     </button>
