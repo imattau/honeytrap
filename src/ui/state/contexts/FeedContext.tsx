@@ -172,14 +172,14 @@ export function FeedProvider({ children }: { children: React.ReactNode }) {
   }, [feedState.profiles, keys]);
 
   // applySettings does a client-side re-filter of already-loaded events.
-  // It should only fire when the follows/followers lists change while the feed
+  // It should only fire when follows/followers/blocked membership changes while the feed
   // mode and list ID stay the same. When feedMode or selectedListId change,
   // subscribeFeed() already restarts the subscription and resets the cache, so
   // calling applySettings at the same time would cause a redundant intermediate
   // state (old events briefly filtered by new mode, then immediately cleared).
   const membershipKey = useMemo(() => {
-    return [settings.follows.join(','), followers.join(',')].join('|');
-  }, [settings.follows, followers]);
+    return [settings.follows.join(','), followers.join(','), settings.blocked.join(',')].join('|');
+  }, [settings.follows, followers, settings.blocked]);
 
   useEffect(() => {
     applySettings(settings);
