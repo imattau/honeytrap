@@ -22,10 +22,12 @@ export class TorrentSyncService {
   }
 
   schedulePublish(pubkey: string, snapshot: TorrentSnapshot) {
+    if (this.hydratedForPubkey !== pubkey) return;
     if (this.publishTimer) globalThis.clearTimeout(this.publishTimer);
     this.publishTimer = undefined;
-    if (this.hydratedForPubkey !== pubkey) return;
+    const now = Date.now();
     const items = Object.values(snapshot)
+      .filter(item => item.availableUntil === undefined || now <= item.availableUntil)
       .sort((a, b) => b.updatedAt - a.updatedAt)
       .slice(0, 100);
     if (items.length === 0) return;

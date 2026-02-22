@@ -15,6 +15,7 @@ interface MediaBlobCacheOptions {
 export class MediaBlobCache {
   private store: CacheStore<MediaBlobEntry>;
   private maxBytes: number;
+  private urlCache = new Map<string, string>();
 
   constructor(options: MediaBlobCacheOptions = {}) {
     this.store = new CacheStore<MediaBlobEntry>({
@@ -30,8 +31,19 @@ export class MediaBlobCache {
 
   async get(key: string): Promise<MediaAssistResult | undefined> {
     const entry = await this.store.get(key);
-    if (!entry) return undefined;
-    const url = URL.createObjectURL(entry.blob);
+    if (!entry) {
+      const cached = this.urlCache.get(key);
+      if (cached) {
+        URL.revokeObjectURL(cached);
+        this.urlCache.delete(key);
+      }
+      return undefined;
+    }
+    let url = this.urlCache.get(key);
+    if (!url) {
+      url = URL.createObjectURL(entry.blob);
+      this.urlCache.set(key, url);
+    }
     return { url, source: entry.source };
   }
 

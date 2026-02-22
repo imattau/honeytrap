@@ -146,8 +146,8 @@ export class WebTorrentAssist {
         });
         this.trackTorrent(magnet, torrent);
         const onReady = () => {
-          if (timedOut) {
-            torrent.destroy();
+          if (timedOut || settled) {
+            if (timedOut) torrent.destroy();
             return;
           }
           globalThis.clearTimeout(timer);

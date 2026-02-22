@@ -103,7 +103,7 @@ export class TorrentRegistry {
     this.items.forEach((value, key) => {
       const expired = value.availableUntil !== undefined && now > value.availableUntil;
       const inactiveStale = !value.active && now - value.updatedAt > this.maxAgeMs;
-      const longLived = now - value.addedAt > this.maxAgeMs * 2;
+      const longLived = !value.active && now - value.addedAt > this.maxAgeMs * 2;
       if (expired || inactiveStale || longLived) {
         this.items.delete(key);
         changed = true;

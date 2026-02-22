@@ -168,9 +168,7 @@ export function useP2PState({
       const now = Date.now();
       const snapshot = torrentSnapshotRef.current;
       Object.values(snapshot).forEach((item) => {
-        if (item.mode !== 'fetch') return;
         if (!item.availableUntil || now > item.availableUntil) return;
-        if (!item.url || !item.url.startsWith('http')) return;
         if (item.active && item.peers > 0) return;
         const lastReseed = reseedAtRef.current.get(item.magnet) ?? 0;
         if (now - lastReseed < RESEED_INTERVAL_MS) return;
@@ -181,20 +179,43 @@ export function useP2PState({
           || currentSettings.follows.includes(item.authorPubkey ?? '');
         if (!allowP2P) return;
         reseedAtRef.current.set(item.magnet, now);
-        const source: AssistSource = {
-          url: item.url,
-          magnet: item.magnet,
-          sha256: undefined,
-          type: 'media',
-          eventId: item.eventId,
-          authorPubkey: item.authorPubkey,
-          availableUntil: item.availableUntil
-        };
-        mediaAssist.ensureWebSeed(source, allowP2P);
+        if (item.mode === 'seed') {
+          try {
+            webtorrentHub.ensure(item.magnet, (torrent) => {
+              torrentRegistry.update(item.magnet, { name: torrent.name });
+              const update = () => torrentRegistry.update(item.magnet, {
+                peers: torrent.numPeers,
+                progress: torrent.progress,
+                downloaded: torrent.downloaded,
+                uploaded: torrent.uploaded
+              });
+              torrent.on('download', update);
+              torrent.on('upload', update);
+              torrent.on('wire', update);
+              torrent.on('noPeers', update);
+              torrent.on('done', update);
+              torrent.on('error', () => torrentRegistry.finish(item.magnet));
+              torrent.on('close', () => torrentRegistry.finish(item.magnet));
+            });
+          } catch {
+            // WebTorrent client not ready
+          }
+        } else if (item.url?.startsWith('http')) {
+          const source: AssistSource = {
+            url: item.url,
+            magnet: item.magnet,
+            sha256: undefined,
+            type: 'media',
+            eventId: item.eventId,
+            authorPubkey: item.authorPubkey,
+            availableUntil: item.availableUntil
+          };
+          mediaAssist.ensureWebSeed(source, allowP2P);
+        }
       });
     }, RESEED_INTERVAL_MS);
     return () => window.clearInterval(timer);
-  }, [mediaAssist]);
+  }, [mediaAssist, webtorrentHub, torrentRegistry]);
 
   const loadMedia = useCallback(async ({
     eventId,
