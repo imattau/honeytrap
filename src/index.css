@@ -139,6 +139,8 @@
        the browser's intrinsic-size estimate (400px) differs from actual height. */
     contain: layout style;
     min-height: 200px;
+    align-content: start;
+    align-items: start;
   }
 
   .post-card--placeholder {
@@ -189,15 +191,15 @@
   .post-card.depth-6 { background-color: #162c3e; }
 
   .post-header {
-    @apply flex justify-between items-center gap-3 flex-wrap;
+    @apply flex justify-between items-start gap-3 flex-wrap;
   }
 
   .post-author {
-    @apply flex items-center gap-3 min-w-0 flex-auto flex-wrap;
+    @apply flex items-start gap-3 min-w-0 flex-auto flex-wrap;
   }
 
   .author-actions {
-    @apply inline-flex gap-1.5 ml-2 flex-wrap;
+    @apply inline-flex gap-1.5 ml-2 flex-wrap self-start;
   }
 
   .post-avatar {
@@ -221,7 +223,7 @@
   }
 
   .post-icons {
-    @apply flex gap-2 flex-wrap justify-end;
+    @apply flex gap-2 flex-wrap justify-end items-start self-start;
   }
 
   .icon-button {
