@@ -3,13 +3,16 @@ import { MediaAssist } from '../src/p2p/mediaAssist';
 import { WebTorrentAssist } from '../src/p2p/webtorrent';
 import type { AssistSource } from '../src/p2p/types';
 
+const blobCacheGetSpy = vi.fn(async () => undefined);
+const blobCacheSetSpy = vi.fn(async () => undefined);
+
 vi.mock('../src/p2p/mediaBlobCache', () => {
   class MediaBlobCache {
-    async get() {
-      return undefined;
+    async get(...args: unknown[]) {
+      return blobCacheGetSpy(...args);
     }
-    async set() {
-      return;
+    async set(...args: unknown[]) {
+      return blobCacheSetSpy(...args);
     }
   }
   return { MediaBlobCache };
@@ -30,6 +33,9 @@ beforeEach(() => {
     createObjectURL: vi.fn(() => 'blob:mock')
   };
   fetchSpy.mockClear();
+  blobCacheGetSpy.mockClear();
+  blobCacheSetSpy.mockClear();
+  blobCacheGetSpy.mockResolvedValue(undefined);
 });
 
 afterEach(() => {
@@ -86,5 +92,27 @@ describe('MediaAssist reseed after HTTP', () => {
     expect(result.source).toBe('http');
     expect(fetchSpy).toHaveBeenCalledTimes(1);
     expect(ensureSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('triggers reseed from cached blob result without refetching HTTP', async () => {
+    const ensureSpy = vi.spyOn(WebTorrentAssist.prototype, 'ensureWebSeed').mockImplementation(() => {});
+    blobCacheGetSpy.mockResolvedValueOnce({ url: 'blob:cached-media', source: 'http' });
+    const assist = new MediaAssist(makeSettings({ preferMedia: true }));
+    const source = makeSource({ sha256: undefined });
+
+    const result = await assist.load(source, true, 1000);
+
+    expect(result.source).toBe('http');
+    expect(result.url).toBe('blob:cached-media');
+    expect(fetchSpy).toHaveBeenCalledTimes(0);
+    expect(ensureSpy).toHaveBeenCalledTimes(1);
+    expect(ensureSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        url: 'blob:cached-media',
+        magnet: source.magnet,
+        type: 'media'
+      }),
+      true
+    );
   });
 });

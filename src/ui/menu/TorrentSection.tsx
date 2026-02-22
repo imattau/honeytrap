@@ -11,6 +11,12 @@ interface TorrentSectionProps {
   saved?: boolean;
 }
 
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes}B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)}K`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)}M`;
+}
+
 export function TorrentSection({ value, onChange, onSave, saved }: TorrentSectionProps) {
   const { torrents, canEncryptNip44, reseedTorrent } = useAppState();
   const [showAll, setShowAll] = React.useState(false);
@@ -127,6 +133,8 @@ export function TorrentSection({ value, onChange, onSave, saved }: TorrentSectio
                 <div className="torrent-meta">
                   <span>{Math.round(item.progress * 100)}%</span>
                   <span>{item.peers} peers</span>
+                  {item.downloaded > 0 && <span>↓ {formatBytes(item.downloaded)}</span>}
+                  {item.uploaded > 0 && <span>↑ {formatBytes(item.uploaded)}</span>}
                 </div>
               </div>
             ))}
@@ -139,6 +147,8 @@ export function TorrentSection({ value, onChange, onSave, saved }: TorrentSectio
                 <div className="torrent-meta">
                   <span>{Math.round(item.progress * 100)}%</span>
                   <span>{item.peers} peers</span>
+                  {item.downloaded > 0 && <span>↓ {formatBytes(item.downloaded)}</span>}
+                  {item.uploaded > 0 && <span>↑ {formatBytes(item.uploaded)}</span>}
                   <button
                     className={`torrent-reseed ${reseeding[item.magnet] ? 'active' : ''}`}
                     disabled={reseedDisabled}

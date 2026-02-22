@@ -42,11 +42,13 @@ export function Drawer() {
   const [savedSection, setSavedSection] = useState<'relays' | 'media' | 'torrent' | 'wallet' | null>(null);
   const [isWide, setIsWide] = useState(false);
   const [isTouch, setIsTouch] = useState(false);
+  const [headerHidden, setHeaderHidden] = useState(false);
   const [menuState, setMenuState] = useState(() => buildMenuState(settings, relayList, mediaRelayList));
   const [relaysOpen, setRelaysOpen] = useState(false);
   const [touchStart, setTouchStart] = useState<number | null>(null);
   const touchStartXRef = useRef<number | null>(null);
   const touchScrollTopRef = useRef<number>(0);
+  const lastScrollTopRef = useRef(0);
 
   const fallbackAvatar = '/assets/honeytrap_logo_256.png';
   const headerImage = '/assets/honeytrap_header_960.png';
@@ -88,6 +90,62 @@ export function Drawer() {
     mq.addEventListener('change', update);
     return () => mq.removeEventListener('change', update);
   }, []);
+
+  useEffect(() => {
+    if (isWide || open) {
+      setHeaderHidden(false);
+    }
+  }, [isWide, open]);
+
+  useEffect(() => {
+    const className = 'mobile-header-hidden';
+    const shouldHide = !isWide && !open && headerHidden;
+    document.body.classList.toggle(className, shouldHide);
+    return () => document.body.classList.remove(className);
+  }, [headerHidden, isWide, open]);
+
+  useEffect(() => {
+    if (isWide) return;
+
+    const getInitialScrollTop = () => {
+      const feedScroller = document.querySelector('.feed-virtuoso');
+      if (feedScroller instanceof HTMLElement) return feedScroller.scrollTop;
+      return window.scrollY || document.documentElement.scrollTop || 0;
+    };
+    lastScrollTopRef.current = getInitialScrollTop();
+
+    const onScroll = (event: Event) => {
+      if (open) {
+        setHeaderHidden(false);
+        return;
+      }
+      const target = event.target;
+      let nextTop: number | null = null;
+      if (target instanceof HTMLElement && target.classList.contains('feed-virtuoso')) {
+        nextTop = target.scrollTop;
+      } else if (
+        target === document ||
+        target === document.documentElement ||
+        target === document.body
+      ) {
+        nextTop = window.scrollY || document.documentElement.scrollTop || 0;
+      }
+      if (nextTop === null) return;
+      const prevTop = lastScrollTopRef.current;
+      const delta = nextTop - prevTop;
+      lastScrollTopRef.current = nextTop;
+      if (nextTop <= 8) {
+        setHeaderHidden(false);
+        return;
+      }
+      if (Math.abs(delta) < 8) return;
+      setHeaderHidden(delta > 0);
+    };
+
+    // Capture phase allows us to observe element scroll events (feed scroller).
+    document.addEventListener('scroll', onScroll, { passive: true, capture: true });
+    return () => document.removeEventListener('scroll', onScroll, true);
+  }, [isWide, open]);
 
   const isAuthed = Boolean(keys?.npub);
 
@@ -139,7 +197,7 @@ export function Drawer() {
   return (
     <>
       {!isWide && (
-        <div className="mobile-header-bar">
+        <div className={`mobile-header-bar ${headerHidden ? 'is-hidden' : ''}`}>
           <button
             className="mobile-header-menu"
             onClick={() => setOpen((prev) => !prev)}

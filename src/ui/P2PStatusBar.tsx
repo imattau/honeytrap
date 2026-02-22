@@ -8,16 +8,7 @@ function formatBytes(bytes: number): string {
 }
 
 export function P2PStatusBar({ torrents, enabled }: { torrents: TorrentSnapshot; enabled: boolean }) {
-  const stats = useMemo(() => {
-    const all = Object.values(torrents);
-    const active = all.filter((t) => t.active);
-    const peers = all.reduce((sum, t) => sum + t.peers, 0);
-    const downloaded = active.reduce((sum, t) => sum + t.downloaded, 0);
-    const uploaded = active.reduce((sum, t) => sum + t.uploaded, 0);
-    const fetching = active.filter((t) => t.mode === 'fetch').length;
-    const seeding = active.filter((t) => t.mode === 'seed').length;
-    return { active: active.length, peers, downloaded, uploaded, fetching, seeding };
-  }, [torrents]);
+  const stats = useMemo(() => computeP2PStats(torrents), [torrents]);
 
   if (!enabled) return null;
 
@@ -56,4 +47,17 @@ export function P2PStatusBar({ torrents, enabled }: { torrents: TorrentSnapshot;
       )}
     </div>
   );
+}
+
+export function computeP2PStats(torrents: TorrentSnapshot) {
+  const all = Object.values(torrents);
+  const active = all.filter((t) => t.active);
+  const peers = all.reduce((sum, t) => sum + t.peers, 0);
+  const downloaded = active.reduce((sum, t) => sum + t.downloaded, 0);
+  const uploaded = active.reduce((sum, t) => sum + t.uploaded, 0);
+  const fetching = active.filter((t) => t.mode === 'fetch').length;
+  // Treat active torrents with upload activity as seeding too, even when the
+  // registry mode is "fetch" (webseed-assisted torrents can still upload).
+  const seeding = active.filter((t) => t.mode === 'seed' || t.uploaded > 0).length;
+  return { active: active.length, peers, downloaded, uploaded, fetching, seeding };
 }

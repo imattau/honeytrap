@@ -26,7 +26,10 @@ export class MediaAssist implements MediaAssistApi {
     const key = cacheKey(source);
     this.cache.purgeExpired();
     const cached = this.cache.get(key);
-    if (cached) return cached;
+    if (cached) {
+      this.maybeReseedFromCachedResult(source, cached, allowP2P);
+      return cached;
+    }
     const inflight = this.inflight.get(key);
     if (inflight) return inflight;
     const task = this.loadWithCache(key, source, allowP2P, timeoutMs)
@@ -54,6 +57,7 @@ export class MediaAssist implements MediaAssistApi {
     const persisted = await this.blobCache.get(key);
     if (persisted) {
       this.cache.set(key, persisted);
+      this.maybeReseedFromCachedResult(source, persisted, allowP2P);
       return persisted;
     }
     const fetched = await this.fetch(source, allowP2P, timeoutMs);
@@ -62,6 +66,13 @@ export class MediaAssist implements MediaAssistApi {
     }
     this.cache.set(key, fetched.result);
     return fetched.result;
+  }
+
+  private maybeReseedFromCachedResult(source: AssistSource, cached: MediaAssistResult, allowP2P: boolean) {
+    if (!allowP2P || !this.settings.enabled) return;
+    if (source.type !== 'media' || !source.magnet) return;
+    if (!cached.url.startsWith('blob:') && !cached.url.startsWith('http')) return;
+    this.p2p.ensureWebSeed({ ...source, url: cached.url }, allowP2P);
   }
 
   private async fetch(

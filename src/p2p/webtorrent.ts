@@ -59,7 +59,7 @@ export class WebTorrentAssist {
   ensureWebSeed(source: AssistSource, allowP2P: boolean) {
     if (!allowP2P || !this.settings.enabled) return;
     if (!source.magnet || source.type !== 'media') return;
-    if (!source.url.startsWith('http')) return;
+    if (!isWebSeedUrl(source.url)) return;
     if (!this.hub?.getClient()) return;
     const magnet = source.magnet;
     const urlList = [source.url];
@@ -126,7 +126,7 @@ export class WebTorrentAssist {
         settle(undefined);
       }, timeoutMs);
 
-      const urlList = source.type === 'media' && source.url.startsWith('http')
+      const urlList = source.type === 'media' && isWebSeedUrl(source.url)
         ? [source.url]
         : undefined;
       this.hub!.ensure(magnet, (torrent: Torrent) => {
@@ -179,4 +179,8 @@ export class WebTorrentAssist {
     torrent.on('error', () => this.registry?.finish(magnet));
     torrent.on('close', () => this.registry?.finish(magnet));
   }
+}
+
+function isWebSeedUrl(url: string) {
+  return url.startsWith('http://') || url.startsWith('https://') || url.startsWith('blob:');
 }

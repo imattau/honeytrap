@@ -114,7 +114,10 @@ export function useP2PState({
             // Re-seed from cached event bytes so we act as a seeder, not a leecher
             cache.getEvent(item.eventId).then((event) => {
               if (!active || !event) return;
-              magnetBuilder.buildEventPackage(event).catch(() => undefined);
+              magnetBuilder.buildEventPackage(event).then((result) => {
+                if (!active || !result.magnet) return;
+                transportStore.mark(item.eventId!, { p2p: true });
+              }).catch(() => undefined);
             }).catch(() => undefined);
           } else {
             try {
@@ -257,6 +260,9 @@ export function useP2PState({
     const shouldReseed = currentSettings.p2p.enabled && allowP2P && Boolean(source.magnet) && source.url.startsWith('http');
     const result = await mediaAssist.load(assistSource, allowP2P, timeoutMs ?? 2000);
     transportStore.mark(eventId, { [result.source]: true });
+    if (shouldReseed) {
+      transportStore.mark(eventId, { p2p: true });
+    }
     return result;
   }, [mediaAssist, transportStore, OWN_AVAILABILITY_MS, OTHER_AVAILABILITY_MS]);
 
@@ -305,11 +311,12 @@ export function useP2PState({
     try {
       const result = await magnetBuilder.buildEventPackage(event);
       if (!result.magnet) return undefined;
+      transportStore.mark(event.id, { p2p: true });
       return { bt: result.magnet, sha256: result.sha256 };
     } catch {
       return undefined;
     }
-  }, [magnetBuilder]);
+  }, [magnetBuilder, transportStore]);
 
   const assistEvent = useCallback(async (event: NostrEvent) => {
     const authorPubkey = event.pubkey;
