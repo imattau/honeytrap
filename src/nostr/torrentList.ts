@@ -38,16 +38,16 @@ export class TorrentListService {
     return event;
   }
 
-  async load(pubkey: string): Promise<TorrentStatus[]> {
+  async load(pubkey: string): Promise<TorrentStatus[] | null> {
     const event = await this.nostr.fetchListEvent(pubkey, this.listId, 30000);
-    if (!event?.content) return [];
+    if (!event?.content) return null;
     const decrypted = await this.cipher.decryptSelf(event.content);
-    if (!decrypted) return [];
+    if (!decrypted) return null;
     try {
       const parsed = JSON.parse(decrypted) as { items?: TorrentStatus[] };
       return parsed.items ?? [];
     } catch {
-      return [];
+      return null;
     }
   }
 }

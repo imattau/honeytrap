@@ -17,6 +17,7 @@ export class TorrentSyncService {
     try {
       const items = await this.listService.load(pubkey);
       if (requestId !== this.hydrateRequestId) return;
+      if (items === null) return;
       const snapshot: TorrentSnapshot = {};
       items.forEach((item) => {
         snapshot[item.magnet] = item;
