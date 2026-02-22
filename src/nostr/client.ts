@@ -16,6 +16,16 @@ import { normalizeRelayUrl } from './relayUrl';
 // headroom by capping ad-hoc queries at 8 concurrent REQs.
 const MAX_CONCURRENT_QUERIES = 8;
 
+// Per-query relay timeout.  pool.querySync waits for EOSE from every relay
+// before resolving; a single dead relay can stall an entire query slot for the
+// full connection-timeout duration.  Race each query against this deadline so
+// we always return whatever events arrived in time.
+const QUERY_TIMEOUT_MS = 5000;
+
+// When cached replies are younger than this we skip the relay round-trip and
+// return the cache immediately, making repeat thread opens feel instant.
+const REPLIES_FRESH_TTL_MS = 60_000;
+
 export class NostrClient implements NostrClientApi {
   private pool = new SimplePool({ enablePing: true, enableReconnect: true });
   private relays: string[] = [];
@@ -162,7 +172,15 @@ export class NostrClient implements NostrClientApi {
 
   async fetchReplies(eventId: string): Promise<NostrEvent[]> {
     const cached = await this.cache?.getReplies(eventId);
-    // Always refresh from relay so thread views don't get stuck on a stale empty cache.
+    // If the cached result is younger than REPLIES_FRESH_TTL_MS, return it
+    // immediately without hitting the relay.  This makes repeat opens of the
+    // same thread feel instant.  For older / missing cache we still refresh.
+    if (cached && cached.length > 0) {
+      const cacheAge = this.cache?.getRepliesAge?.(eventId);
+      if (cacheAge !== undefined && cacheAge < REPLIES_FRESH_TTL_MS) {
+        return cached;
+      }
+    }
     // Fetch limit is 300 to compensate for post-fetch filtering to direct replies only.
     const events = await this.safeQuerySync({ kinds: [1], '#e': [eventId], limit: 300 });
     const fresh = events as NostrEvent[];
@@ -373,8 +391,13 @@ export class NostrClient implements NostrClientApi {
     if (this.relays.length === 0) return [];
     return this.queryLimit(async () => {
       try {
-        const events = await this.pool.querySync(this.relays, filter);
-        return events as NostrEvent[];
+        // Race the relay query against a timeout so one unresponsive relay
+        // never stalls the whole query slot for more than QUERY_TIMEOUT_MS.
+        const timeout = new Promise<NostrEvent[]>((resolve) =>
+          setTimeout(() => resolve([]), QUERY_TIMEOUT_MS)
+        );
+        const query = this.pool.querySync(this.relays, filter).then((ev) => ev as NostrEvent[]);
+        return await Promise.race([query, timeout]);
       } catch {
         return [];
       }
