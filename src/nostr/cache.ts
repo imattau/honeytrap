@@ -47,6 +47,10 @@ export class NostrCache implements NostrCacheApi {
     return this.replies.get(`replies:${eventId}`);
   }
 
+  async getRepliesAge(eventId: string) {
+    return this.replies.getAgeMs(`replies:${eventId}`);
+  }
+
   async setReplies(eventId: string, events: NostrEvent[]) {
     await this.replies.set(`replies:${eventId}`, events, TTL_REPLIES);
   }

@@ -109,24 +109,13 @@
     @apply flex justify-center py-3 max-w-full w-full;
   }
 
-  .feed-grid {
+  .feed-row {
     display: grid;
-    grid-template-columns: repeat(1, minmax(0, 1fr));
     gap: 16px;
     width: 100%;
+    align-items: start;
     padding: 0 4px;
-  }
-
-  @media (min-width: 768px) {
-    .feed-grid {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-  }
-
-  @media (min-width: 1200px) {
-    .feed-grid {
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-    }
+    margin-bottom: 16px;
   }
 
   .feed-grid-item {
@@ -164,6 +153,26 @@
   @media (max-width: 767px) {
     .post-card {
       @apply w-[min(720px,92vw)] max-w-[calc(100vw-32px)];
+    }
+  }
+
+  /* Multi-column feed: enforce per-row card parity so varying content lengths
+     don't produce a ragged, disorganized grid. */
+  @media (min-width: 768px) {
+    .feed-row {
+      align-items: stretch;
+    }
+
+    .feed-grid-item {
+      align-self: stretch;
+    }
+
+    .post-card {
+      height: 100%;
+    }
+
+    .post-card > .post-actions:last-child {
+      margin-top: auto;
     }
   }
 

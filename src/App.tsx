@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
-import { VirtuosoGrid, type VirtuosoGridHandle } from 'react-virtuoso';
+import { Virtuoso, type VirtuosoHandle } from 'react-virtuoso';
 import { BrowserRouter, Route, Routes, useNavigate, useLocation } from 'react-router-dom';
 import { AppStateProvider, useAppState, useFeedControlState } from './ui/AppState';
 import { Drawer } from './ui/Drawer';
@@ -53,7 +53,7 @@ function Feed() {
   const [replyTarget, setReplyTarget] = useState<NostrEvent | undefined>(undefined);
   const navigate = useNavigate();
   const location = useLocation();
-  const virtuosoRef = useRef<VirtuosoGridHandle | null>(null);
+  const virtuosoRef = useRef<VirtuosoHandle | null>(null);
   const scrollerRef = useRef<HTMLElement | null>(null);
   const pullRef = useRef<HTMLDivElement | null>(null);
   const pullLabelRef = useRef<HTMLSpanElement | null>(null);
@@ -75,8 +75,7 @@ function Feed() {
     const top = Number(stored);
     if (!Number.isFinite(top)) return;
     requestAnimationFrame(() => {
-      // VirtuosoGrid scrollTo top is slightly different or might not be needed if session storage works
-      // Actually, VirtuosoGrid scrollTo works similarly.
+      // Restore feed scroll position when returning to /
       virtuosoRef.current?.scrollTo({ top, behavior: 'auto' });
     });
   }, [location.pathname]);
@@ -179,51 +178,44 @@ function Feed() {
     setComposerOpen(true);
   }, []);
 
-  const itemContentRenderer = useCallback((_: number, event: NostrEvent) => (
-    <FeedGridItem
-      event={event}
+  const feedRows = useMemo(() => buildFeedRows(events, gridColumns), [events, gridColumns]);
+
+  const rowContentRenderer = useCallback((_: number, row: FeedRow) => (
+    <FeedEventRow
+      row={row}
+      columns={gridColumns}
       onSelect={selectEvent}
       onOpenThread={handleOpenThread}
       onReply={handleReply}
     />
-  ), [handleOpenThread, handleReply, selectEvent]);
+  ), [gridColumns, handleOpenThread, handleReply, selectEvent]);
 
   const virtualizationTuning = useMemo(() => {
     if (gridColumns >= 3) {
       return {
-        prefetchRemainingItems: 72,
+        prefetchRemainingRows: 24,
         overscanPx: 2600,
-        // Bottom extension reduced: pre-rendering too many off-screen cards
-        // causes them to render before their author profiles are available,
-        // producing a visible "no profile" flash. Keep top generous so
-        // scrolling back up is smooth; cap the bottom to ~2 screen-heights.
         viewportBy: { top: 1400, bottom: 1800 } as const
       };
     }
     if (gridColumns === 2) {
       return {
-        prefetchRemainingItems: 40,
+        prefetchRemainingRows: 20,
         overscanPx: 2200,
         viewportBy: { top: 1200, bottom: 1600 } as const
       };
     }
     return {
-      prefetchRemainingItems: 18,
+      prefetchRemainingRows: 18,
       overscanPx: 1800,
       viewportBy: { top: 1000, bottom: 1400 } as const
     };
   }, [gridColumns]);
 
   const handleRangeChanged = useCallback((range: { startIndex: number; endIndex: number }) => {
-    const remaining = events.length - range.endIndex - 1;
-    if (remaining <= virtualizationTuning.prefetchRemainingItems) loadOlderSafe();
-  }, [events.length, virtualizationTuning.prefetchRemainingItems]);
-
-  // No ScrollSeekPlaceholder: the placeholder rendered blank animated cards
-  // during fast scrolling. Removing it means Virtuoso renders real PostCards
-  // at all scroll speeds — cards may be skipped by the browser's compositing
-  // during the fastest flicks, but users never see blank shimmer boxes.
-  const gridComponents = useMemo(() => ({}), []);
+    const remaining = feedRows.length - range.endIndex - 1;
+    if (remaining <= virtualizationTuning.prefetchRemainingRows) loadOlderSafe();
+  }, [feedRows.length, virtualizationTuning.prefetchRemainingRows]);
 
   return (
     <div
@@ -308,20 +300,17 @@ function Feed() {
       )}
 
       {(events.length > 0 || feedLoading) && (
-        <VirtuosoGrid
+        <Virtuoso
           ref={virtuosoRef}
           scrollerRef={scrollerRefHandler}
           className="feed-virtuoso"
-          listClassName="feed-grid"
-          itemClassName="feed-grid-item"
-          components={gridComponents}
-          data={events}
-          computeItemKey={(_, event) => event.id}
+          data={feedRows}
+          computeItemKey={(_, row) => row.key}
           overscan={virtualizationTuning.overscanPx}
           increaseViewportBy={virtualizationTuning.viewportBy}
           rangeChanged={handleRangeChanged}
           endReached={() => loadOlderSafe()}
-          itemContent={itemContentRenderer}
+          itemContent={rowContentRenderer}
         />
       )}
       <FabButton
@@ -369,6 +358,35 @@ const FeedGridItem = React.memo(function FeedGridItem({
       showActions
       onReply={handleReply}
     />
+  );
+});
+
+const FeedEventRow = React.memo(function FeedEventRow({
+  row,
+  columns,
+  onSelect,
+  onOpenThread,
+  onReply
+}: {
+  row: FeedRow;
+  columns: number;
+  onSelect: (event?: NostrEvent) => void;
+  onOpenThread: (event: NostrEvent) => void;
+  onReply: (event: NostrEvent) => void;
+}) {
+  return (
+    <div className="feed-row" style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}>
+      {row.events.map((event) => (
+        <div className="feed-grid-item" key={event.id}>
+          <FeedGridItem
+            event={event}
+            onSelect={onSelect}
+            onOpenThread={onOpenThread}
+            onReply={onReply}
+          />
+        </div>
+      ))}
+    </div>
   );
 });
 
@@ -469,4 +487,23 @@ function getFeedGridColumns(width: number): number {
   if (width >= 1200) return 3;
   if (width >= 768) return 2;
   return 1;
+}
+
+interface FeedRow {
+  key: string;
+  events: NostrEvent[];
+}
+
+function buildFeedRows(events: NostrEvent[], columns: number): FeedRow[] {
+  if (events.length === 0) return [];
+  const perRow = Math.max(1, columns);
+  const rows: FeedRow[] = [];
+  for (let i = 0; i < events.length; i += perRow) {
+    const rowEvents = events.slice(i, i + perRow);
+    rows.push({
+      key: `${rowEvents[0]?.id ?? i}:${rowEvents[rowEvents.length - 1]?.id ?? i}`,
+      events: rowEvents
+    });
+  }
+  return rows;
 }

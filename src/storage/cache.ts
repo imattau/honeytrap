@@ -93,6 +93,26 @@ export class CacheStore<T> {
     return purgeExpiredCacheEntries(now);
   }
 
+  async getAgeMs(key: string): Promise<number | undefined> {
+    const now = Date.now();
+    const mem = this.readFromMemory(key);
+    if (mem) {
+      if (mem.expiresAt > now) {
+        return Math.max(0, now - mem.storedAt);
+      }
+      this.memory.delete(key);
+      this.dirtyKeys.delete(key);
+    }
+    const stored = await loadCacheEntry(key);
+    if (!stored) return undefined;
+    if (stored.expiresAt <= now) {
+      await deleteCacheEntry(key);
+      return undefined;
+    }
+    this.memory.set(key, stored);
+    return Math.max(0, now - stored.storedAt);
+  }
+
   private markAccess(key: string) {
     if (this.persistAccessMs === null) return;
     this.dirtyKeys.add(key);

@@ -176,7 +176,7 @@ export class NostrClient implements NostrClientApi {
     // immediately without hitting the relay.  This makes repeat opens of the
     // same thread feel instant.  For older / missing cache we still refresh.
     if (cached && cached.length > 0) {
-      const cacheAge = this.cache?.getRepliesAge?.(eventId);
+      const cacheAge = await this.cache?.getRepliesAge?.(eventId);
       if (cacheAge !== undefined && cacheAge < REPLIES_FRESH_TTL_MS) {
         return cached;
       }

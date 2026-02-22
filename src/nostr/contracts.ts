@@ -39,6 +39,7 @@ export interface NostrCacheApi {
   setEvent(event: NostrEvent): Promise<void>;
   setEvents(events: NostrEvent[]): Promise<void>;
   getReplies(eventId: string): Promise<NostrEvent[] | undefined>;
+  getRepliesAge(eventId: string): Promise<number | undefined>;
   setReplies(eventId: string, events: NostrEvent[]): Promise<void>;
   getFollowers(pubkey: string): Promise<string[] | undefined>;
   setFollowers(pubkey: string, list: string[]): Promise<void>;
