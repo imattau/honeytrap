@@ -1,4 +1,4 @@
-import type { TorrentSnapshot } from './registry';
+import type { TorrentSnapshot, TorrentStatus } from './registry';
 import type { TorrentListService } from '../nostr/torrentList';
 
 export class TorrentSyncService {
@@ -6,7 +6,10 @@ export class TorrentSyncService {
   private hydrateRequestId = 0;
   private publishTimer?: ReturnType<typeof setTimeout>;
 
-  constructor(private listService: TorrentListService) {}
+  constructor(
+    private listService: TorrentListService,
+    private publishPublic?: (items: TorrentStatus[]) => Promise<void>
+  ) {}
 
   async hydrate(pubkey: string, onItems: (snapshot: TorrentSnapshot) => void) {
     if (this.hydratedForPubkey === pubkey) return;
@@ -22,9 +25,9 @@ export class TorrentSyncService {
   }
 
   schedulePublish(pubkey: string, snapshot: TorrentSnapshot) {
-    if (this.hydratedForPubkey !== pubkey) return;
     if (this.publishTimer) globalThis.clearTimeout(this.publishTimer);
     this.publishTimer = undefined;
+    if (this.hydratedForPubkey !== pubkey) return;
     const now = Date.now();
     const items = Object.values(snapshot)
       .filter(item => item.availableUntil === undefined || now <= item.availableUntil)
@@ -35,6 +38,7 @@ export class TorrentSyncService {
       this.publishTimer = undefined;
       if (this.hydratedForPubkey !== pubkey) return;
       this.listService.publish(items).catch(() => null);
+      this.publishPublic?.(items).catch(() => null);
     }, 10_000);
   }
 

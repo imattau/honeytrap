@@ -3,11 +3,22 @@ import { flushSync } from 'react-dom';
 import { Virtuoso } from 'react-virtuoso';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Hash } from 'lucide-react';
-import type { NostrEvent } from '../nostr/types';
+import type { NostrEvent, ProfileMetadata } from '../nostr/types';
 import { useAppState } from './AppState';
 import { PostCard } from './PostCard';
 import { Composer } from './Composer';
 import { openThread } from './threadNavigation';
+
+const LOADING_FALLBACK_MS = 1800;
+
+function sameEventList(left: NostrEvent[], right: NostrEvent[]) {
+  if (left.length !== right.length) return false;
+  for (let i = 0; i < left.length; i += 1) {
+    if (left[i]?.id !== right[i]?.id) return false;
+    if (left[i]?.created_at !== right[i]?.created_at) return false;
+  }
+  return true;
+}
 
 export function HashtagView() {
   const { tag } = useParams<{ tag: string }>();
@@ -25,6 +36,17 @@ export function HashtagView() {
     eventsRef.current = events;
   }, [events]);
 
+  const applyEvents = (next: NostrEvent[], resolveLoading = false) => {
+    const current = eventsRef.current;
+    if (sameEventList(current, next)) {
+      if (resolveLoading || next.length > 0) setLoading(false);
+      return;
+    }
+    eventsRef.current = next;
+    setEvents(next);
+    if (resolveLoading || next.length > 0) setLoading(false);
+  };
+
   useEffect(() => {
     if (!normalized) {
       eventsRef.current = [];
@@ -36,21 +58,37 @@ export function HashtagView() {
     setEvents([]);
     setLoading(true);
     let active = true;
+    const handleProfiles = (incoming: Record<string, ProfileMetadata>) => {
+      if (!active) return;
+      mergeProfiles(incoming);
+    };
+    const fallbackTimer = globalThis.setTimeout(() => {
+      if (active) setLoading(false);
+    }, LOADING_FALLBACK_MS);
     hashtagService.subscribeHashtagFeed(
       normalized,
       () => eventsRef.current,
       (next) => {
         if (!active) return;
-        setEvents(next);
-        if (next.length > 0) setLoading(false);
+        applyEvents(next);
       },
-      (incoming) => {
-        if (!active) return;
-        mergeProfiles(incoming);
-      }
+      handleProfiles
     );
+    hashtagService.primeHashtagFeed(
+      normalized,
+      () => eventsRef.current,
+      (next) => {
+        if (!active) return;
+        applyEvents(next, true);
+      },
+      handleProfiles
+    ).catch(() => null)
+      .finally(() => {
+        if (active) setLoading(false);
+      });
     return () => {
       active = false;
+      globalThis.clearTimeout(fallbackTimer);
       hashtagService.stop();
     };
   }, [hashtagService, mergeProfiles, normalized]);
@@ -87,7 +125,14 @@ export function HashtagView() {
             </div>
           )
         }}
-        endReached={() => normalized ? hashtagService.loadOlder(normalized, () => eventsRef.current, setEvents) : Promise.resolve()}
+        endReached={() => normalized
+          ? hashtagService.loadOlder(
+            normalized,
+            () => eventsRef.current,
+            (next) => applyEvents(next),
+            (incoming) => mergeProfiles(incoming)
+          )
+          : Promise.resolve()}
         itemContent={(_, event) => (
           <div className="feed-item">
             <PostCard

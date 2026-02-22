@@ -27,7 +27,18 @@ export class MediaAttachService {
         results.push(seeded);
       } else {
         const uploaded = await this.uploader(file, options.relays, options.onProgress, options.preferredRelay);
-        results.push(uploaded);
+        let seeded: { magnet?: string; sha256?: string } | undefined;
+        try {
+          const seededResult = await this.seeder(file);
+          seeded = { magnet: seededResult.magnet, sha256: seededResult.sha256 };
+        } catch {
+          seeded = undefined;
+        }
+        results.push({
+          url: uploaded.url,
+          sha256: uploaded.sha256 ?? seeded?.sha256,
+          magnet: seeded?.magnet
+        });
       }
     }
     return results;

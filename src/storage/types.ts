@@ -9,6 +9,7 @@ export interface P2PSettings {
   maxFileSizeMb: number;
   seedWhileOpen: boolean;
   seedRelayEvents: boolean;
+  publishSeedingList: boolean;
   trackers: string[];
 }
 

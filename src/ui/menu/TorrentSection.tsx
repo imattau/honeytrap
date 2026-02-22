@@ -68,6 +68,16 @@ export function TorrentSection({ value, onChange, onSave, saved }: TorrentSectio
           <span>Prefer P2P for events</span>
         </label>
       </div>
+      <div className="menu-toggle-row">
+        <label className="menu-toggle">
+          <input
+            type="checkbox"
+            checked={value.publishSeedingList}
+            onChange={(event) => onChange({ publishSeedingList: event.target.checked })}
+          />
+          <span>Publish public seeding index</span>
+        </label>
+      </div>
       <div className="menu-row">
         <label className="menu-label"><Globe2 size={14} /> P2P scope</label>
         <select
@@ -115,6 +125,9 @@ export function TorrentSection({ value, onChange, onSave, saved }: TorrentSectio
           Encrypted torrent list is best-effort. Remote signer support is planned.
         </div>
       )}
+      <div className="menu-sub">
+        Public seeding index helps other Honeytrap clients discover magnet links when posts omit them.
+      </div>
       {(activeTorrents.length > 0 || inactiveTorrents.length > 0) && (
         <div className="torrent-list">
           <div className="menu-row">

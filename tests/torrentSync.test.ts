@@ -100,4 +100,25 @@ describe('TorrentSyncService', () => {
 
     expect(publish).toHaveBeenCalledTimes(1);
   });
+
+  it('publishes to public seeding callback alongside private list', async () => {
+    const publish = vi.fn(async () => undefined);
+    const publishPublic = vi.fn(async () => undefined);
+    const service = new TorrentSyncService(
+      {
+        load: vi.fn(async () => []),
+        publish
+      } as any,
+      publishPublic
+    );
+    const snapshot: TorrentSnapshot = { 'magnet:alice': makeStatus('magnet:alice') };
+
+    await service.hydrate('alice', () => null);
+    service.schedulePublish('alice', snapshot);
+    vi.advanceTimersByTime(10_100);
+
+    expect(publish).toHaveBeenCalledTimes(1);
+    expect(publishPublic).toHaveBeenCalledTimes(1);
+    expect(publishPublic).toHaveBeenCalledWith([expect.objectContaining({ magnet: 'magnet:alice' })]);
+  });
 });
