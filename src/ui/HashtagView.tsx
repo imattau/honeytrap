@@ -65,7 +65,7 @@ export function HashtagView() {
         }} aria-label="Back">
           <ArrowLeft size={18} />
         </button>
-        <div className="author-card">
+        <div className="author-card-root">
           <div className="author-avatar fallback">
             <Hash size={18} />
           </div>

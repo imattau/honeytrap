@@ -5,8 +5,8 @@ import type { FeedOrchestratorApi, FeedServiceApi } from './contracts';
 import type { NostrCache } from './cache';
 import { AsyncEventVerifier, type EventVerifier } from './eventVerifier';
 
-const MAX_EVENTS = 300;
-const MAX_BUFFER = 400;
+const MAX_EVENTS = 1000;
+const MAX_BUFFER = 1200;
 const LIVE_FLUSH_INTERVAL_MS = 40;
 
 export class FeedOrchestrator implements FeedOrchestratorApi {
@@ -354,13 +354,24 @@ export class FeedOrchestrator implements FeedOrchestratorApi {
 
   private mergeEvents(existing: NostrEvent[], incoming: NostrEvent[]): NostrEvent[] {
     const deduped = new Map<string, NostrEvent>();
-    [...incoming, ...existing].forEach((event) => {
+    
+    // First, add existing events to the map
+    existing.forEach((event) => {
+      const key = eventIdentityKey(event);
+      deduped.set(key, event);
+    });
+
+    // Then, merge incoming events, only replacing if they are truly "better" 
+    // or if we don't have them yet.
+    incoming.forEach((event) => {
       const key = eventIdentityKey(event);
       const current = deduped.get(key);
       if (!current) {
         deduped.set(key, event);
         return;
       }
+      // If we have it, only replace if the incoming one is newer.
+      // If they have the same created_at and ID, KEEP the existing object reference.
       if (event.created_at > current.created_at) {
         deduped.set(key, event);
         return;
@@ -369,6 +380,7 @@ export class FeedOrchestrator implements FeedOrchestratorApi {
         deduped.set(key, event);
       }
     });
+
     const merged = Array.from(deduped.values())
       .sort((a, b) => b.created_at - a.created_at || b.id.localeCompare(a.id))
       .slice(0, MAX_EVENTS);

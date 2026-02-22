@@ -1,19 +1,21 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { flushSync } from 'react-dom';
 import { Virtuoso } from 'react-virtuoso';
-import { X } from 'lucide-react';
+import { X, MessageSquare } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { openThread } from './threadNavigation';
 import type { ThreadNode } from '../nostr/thread';
 import type { NostrEvent, ProfileMetadata } from '../nostr/types';
-import { useAppState } from './AppState';
+import { useFeed } from './state/contexts/FeedContext';
+import { useSettings } from './state/contexts/SettingsContext';
+import { useRelay } from './state/contexts/RelayContext';
+import { useP2P } from './state/contexts/P2PContext';
 import { PostCard } from './PostCard';
 import { Composer } from './Composer';
 import { ZapComposer } from './ZapComposer';
 import { getThreadPreview } from './threadPreviewCache';
 import { EmptyState } from './EmptyState';
 import { Card } from './Card';
-import { MessageSquare } from 'lucide-react';
 
 export function ThreadStack() {
   const { id } = useParams<{ id: string }>();
@@ -24,12 +26,14 @@ export function ThreadStack() {
     loadThread,
     publishReply,
     sendZap,
-    settings,
     findEventById,
-    mediaRelayList,
-    attachMedia,
     hydrateProfiles
-  } = useAppState();
+  } = useFeed();
+
+  const { settings } = useSettings();
+  const { mediaRelayList } = useRelay();
+  const { attachMedia } = useP2P();
+
   const initialFallback = id ? (getThreadPreview(id) ?? findEventById(id)) : undefined;
   const [nodes, setNodes] = useState<ThreadNode[]>(
     () => (initialFallback ? [{ event: initialFallback, depth: 0, role: 'target' }] : [])
@@ -155,7 +159,6 @@ export function ThreadStack() {
           <div className="thread-item" data-depth={node.depth}>
             <PostCard
               event={node.event}
-              profile={profiles[node.event.pubkey]}
               onOpenThread={() => openThread(navigate, node.event)}
               depth={node.depth}
               variant={node.role}

@@ -42,15 +42,25 @@ export function useFeedState({
   const feedService = useMemo(() => new WorkerFeedService(nostr), [nostr]);
   const timelineCache = useMemo(() => new FeedTimelineCache(), []);
   
-  // Use a ref for isBlocked to avoid orchestrator recreation on every render
+  // Use refs for functions that might change due to unrelated settings updates
+  const onEventAssistRef = useRef(onEventAssist);
   const isBlockedRef = useRef(isBlocked);
   useEffect(() => {
+    onEventAssistRef.current = onEventAssist;
     isBlockedRef.current = isBlocked;
-  }, [isBlocked]);
+  }, [onEventAssist, isBlocked]);
 
   const orchestrator = useMemo(
-    () => new FeedOrchestrator(nostr, feedService, transportStore, (pk) => isBlockedRef.current(pk), onEventAssist, cache, verifier),
-    [nostr, feedService, transportStore, onEventAssist, cache, verifier]
+    () => new FeedOrchestrator(
+      nostr, 
+      feedService, 
+      transportStore, 
+      (pk) => isBlockedRef.current(pk), 
+      (ev) => onEventAssistRef.current?.(ev), 
+      cache, 
+      verifier
+    ),
+    [nostr, feedService, transportStore, cache, verifier]
   );
 
   const eventsRef = useRef<NostrEvent[]>([]);
@@ -115,6 +125,10 @@ export function useFeedState({
     });
   }, []);
 
+  const relayKey = useMemo(() => relays.join(','), [relays]);
+  const followKey = useMemo(() => settings.follows.join(','), [settings.follows]);
+  const followerKey = useMemo(() => followers.join(','), [followers]);
+
   const subscribeFeed = useCallback(() => {
     timelineCache.reset();
     eventsRef.current = [];
@@ -133,7 +147,7 @@ export function useFeedState({
       mergeProfiles,
       setPendingCountBatched
     );
-  }, [orchestrator, settings.follows, settings.selectedListId, settings.feedMode, followers, setFeedLoadingSafe, mergeProfiles, setPendingCountBatched, timelineCache, relays]);
+  }, [orchestrator, settings.selectedListId, settings.feedMode, setFeedLoadingSafe, mergeProfiles, setPendingCountBatched, timelineCache, relayKey]);
 
   useEffect(() => {
     orchestrator.stop();
@@ -158,7 +172,7 @@ export function useFeedState({
     } finally {
       setFeedLoadingSafe(false);
     }
-  }, [orchestrator, settings.follows, settings.selectedListId, settings.feedMode, followers, setFeedLoadingSafe, timelineCache, relays]);
+  }, [orchestrator, settings.selectedListId, settings.feedMode, setFeedLoadingSafe, timelineCache, relayKey, followKey, followerKey]);
 
   const flushPending = useCallback(() => {
     orchestrator.flushPending(() => eventsRef.current, (next) => timelineCache.set(next));
@@ -187,7 +201,7 @@ export function useFeedState({
     const graph = new SocialGraph(next);
     const base = graph.filterEvents(eventsRef.current);
     timelineCache.set(filterByFeedMode(base, next, followers));
-  }, [followers, timelineCache]);
+  }, [followerKey, timelineCache]);
 
   useEffect(() => {
     orchestrator.setPaused(paused);

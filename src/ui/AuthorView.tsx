@@ -2,16 +2,20 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import { Virtuoso } from 'react-virtuoso';
 import { useNavigate, useParams } from 'react-router-dom';
+import { FileX } from 'lucide-react';
 import type { NostrEvent, ProfileMetadata } from '../nostr/types';
-import { useAppState } from './AppState';
+import { decodeKey } from '../nostr/auth';
+import { useFeed } from './state/contexts/FeedContext';
+import { useSocial } from './state/contexts/SocialContext';
+import { useSettings } from './state/contexts/SettingsContext';
+import { useRelay } from './state/contexts/RelayContext';
+import { useP2P } from './state/contexts/P2PContext';
 import { PostCard } from './PostCard';
 import { FabButton } from './FabButton';
 import { Composer } from './Composer';
-import { decodeKey } from '../nostr/auth';
 import { openThread } from './threadNavigation';
 import { AuthorHeader } from './AuthorHeader';
 import { EmptyState } from './EmptyState';
-import { FileX } from 'lucide-react';
 
 export function AuthorView() {
   const { pubkey } = useParams<{ pubkey: string }>();
@@ -20,19 +24,15 @@ export function AuthorView() {
     authorService,
     profiles,
     selectEvent,
-    isFollowed,
-    isBlocked,
-    toggleFollow,
-    toggleBlock,
     publishPost,
     publishReply,
-    mediaRelayList,
-    settings,
-    attachMedia,
-    fetchFollowersFor,
-    fetchFollowingFor,
     mergeProfiles
-  } = useAppState();
+  } = useFeed();
+
+  const { isFollowed, isBlocked, toggleFollow, toggleBlock, fetchFollowersFor, fetchFollowingFor } = useSocial();
+  const { settings } = useSettings();
+  const { mediaRelayList } = useRelay();
+  const { attachMedia } = useP2P();
 
   const [events, setEvents] = useState<NostrEvent[]>([]);
   const [profile, setProfile] = useState<ProfileMetadata | undefined>(undefined);
@@ -165,7 +165,6 @@ export function AuthorView() {
           <div className="feed-item">
             <PostCard
               event={event}
-              profile={profiles[event.pubkey] ?? profile}
               onSelect={selectEvent}
               onOpenThread={() => openThread(navigate, event)}
               showActions
