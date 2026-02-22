@@ -271,13 +271,14 @@ export function useP2PState({
     });
   }, [torrentRegistry, webtorrentHub]);
 
-  const seedEvent = useCallback(async (event: NostrEvent) => {
-    if (!settingsRef.current.p2p.enabled) return;
+  const seedEvent = useCallback(async (event: NostrEvent): Promise<{ bt: string; sha256?: string } | undefined> => {
+    if (!settingsRef.current.p2p.enabled) return undefined;
     try {
       const result = await magnetBuilder.buildEventPackage(event);
-      if (!result.magnet) return;
+      if (!result.magnet) return undefined;
+      return { bt: result.magnet, sha256: result.sha256 };
     } catch {
-      // Fire-and-forget; seeding failure is non-fatal
+      return undefined;
     }
   }, [magnetBuilder]);
 
