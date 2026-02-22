@@ -10,10 +10,21 @@ export interface ThreadNode {
   role: 'root' | 'ancestor' | 'target' | 'reply';
 }
 
+// How long (ms) to serve a cached thread result before re-fetching from relays.
+// Re-opening the same thread within this window is instant.
+const THREAD_CACHE_TTL_MS = 90_000;
+
+interface CachedThread {
+  nodes: ThreadNode[];
+  storedAt: number;
+}
+
 export class ThreadService implements ThreadServiceApi {
   private readonly maxReplyFetchDepth = 4;
   private readonly maxReplyNodes = 300;
   private verifier: EventVerifier;
+  // In-memory cache of fully assembled ThreadNode arrays, keyed by event id.
+  private threadCache = new Map<string, CachedThread>();
 
   constructor(
     private client: NostrClient,
@@ -25,6 +36,12 @@ export class ThreadService implements ThreadServiceApi {
   }
 
   async loadThread(eventId: string): Promise<ThreadNode[]> {
+    // Return cached result immediately if it is fresh enough.
+    const cached = this.threadCache.get(eventId);
+    if (cached && Date.now() - cached.storedAt < THREAD_CACHE_TTL_MS) {
+      return cached.nodes;
+    }
+
     const target = await this.client.fetchEventById(eventId);
     if (!target) return [];
     if (this.isBlocked?.(target.pubkey)) return [];
@@ -60,6 +77,7 @@ export class ThreadService implements ThreadServiceApi {
       nodes.push({ event: reply, depth, role: 'reply' });
     });
 
+    this.threadCache.set(eventId, { nodes, storedAt: Date.now() });
     return nodes;
   }
 
@@ -73,21 +91,57 @@ export class ThreadService implements ThreadServiceApi {
       for (const ev of fetched) prefetched.set(ev.id, ev);
     }
 
-    // Walk the chain using prefetched events; fall back to individual queries
-    // only for any gaps not covered by the e-tags.
+    // Walk the chain using prefetched events; collect any gap IDs that require
+    // an additional relay lookup, then batch-fetch them all at once.
     const chain: NostrEvent[] = [];
     let current: NostrEvent | undefined = event;
     let depth = 0;
     const MAX_ANCESTOR_DEPTH = 50;
+
+    // First pass: walk as far as we can with prefetched data, recording gaps.
+    const gapIds: string[] = [];
     while (current && depth < MAX_ANCESTOR_DEPTH) {
       depth++;
       chain.unshift(current);
       const parentId = getReplyParentId(current);
       if (!parentId) break;
-      const parent = prefetched.get(parentId) ?? await this.client.fetchEventById(parentId);
-      if (!parent) break;
+      const parent = prefetched.get(parentId);
+      if (!parent) {
+        // Gap: this parent was not in the target's e-tags. Record it and stop
+        // the first-pass walk — we'll re-walk after a batch fetch.
+        gapIds.push(parentId);
+        break;
+      }
       current = parent;
     }
+
+    // If there are gap IDs, batch-fetch them all (they are likely already in
+    // the event cache from previous relay queries, so this is usually free).
+    if (gapIds.length > 0) {
+      const gapFetched = await this.client.fetchEventsByIds(gapIds);
+      for (const ev of gapFetched) prefetched.set(ev.id, ev);
+
+      // Second pass: extend the chain upward using the newly fetched events.
+      // Start from the first gap node we recorded.
+      let gapCurrent = prefetched.get(gapIds[0]);
+      while (gapCurrent && depth < MAX_ANCESTOR_DEPTH) {
+        depth++;
+        chain.unshift(gapCurrent);
+        const parentId = getReplyParentId(gapCurrent);
+        if (!parentId) break;
+        const parent = prefetched.get(parentId);
+        if (!parent) {
+          // Deeper gap — fetch individually (rare for well-structured threads).
+          const fetched = await this.client.fetchEventById(parentId);
+          if (!fetched) break;
+          prefetched.set(parentId, fetched);
+          gapCurrent = fetched;
+        } else {
+          gapCurrent = parent;
+        }
+      }
+    }
+
     return chain;
   }
 

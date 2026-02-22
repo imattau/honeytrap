@@ -24,7 +24,9 @@ const QUERY_TIMEOUT_MS = 5000;
 
 // When cached replies are younger than this we skip the relay round-trip and
 // return the cache immediately, making repeat thread opens feel instant.
-const REPLIES_FRESH_TTL_MS = 60_000;
+// Align with TTL_REPLIES in cache.ts (5 min) so any cached result within its
+// validity window avoids a redundant relay round-trip.
+const REPLIES_FRESH_TTL_MS = 5 * 60_000;
 
 export class NostrClient implements NostrClientApi {
   private pool = new SimplePool({ enablePing: true, enableReconnect: true });
