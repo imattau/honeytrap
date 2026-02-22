@@ -1320,6 +1320,54 @@
     @apply text-[13px] text-[#97acc4];
   }
 
+  .notifications-controls {
+    @apply w-[min(760px,calc(100vw-26px))] mx-auto mb-3.5 flex flex-wrap items-center justify-between gap-2.5;
+  }
+
+  .notifications-filters {
+    @apply inline-flex items-center gap-2 flex-wrap;
+  }
+
+  .notifications-filter-pill {
+    @apply inline-flex items-center gap-2 rounded-full border border-[#1b222c] px-2.5 py-1 text-xs text-[#bfd0e6];
+    background-color: rgba(12, 17, 24, 0.72);
+  }
+
+  .notifications-filter-pill.active {
+    border-color: rgba(109, 214, 255, 0.42);
+    background-color: rgba(12, 23, 30, 0.88);
+    @apply text-glow shadow-neon;
+  }
+
+  .notifications-filter-count {
+    @apply inline-flex items-center justify-center min-w-5 h-5 px-1 rounded-full text-[10px] text-[#d7e8fb];
+    background-color: rgba(27, 34, 44, 0.9);
+  }
+
+  .notifications-read-button {
+    @apply inline-flex items-center rounded-full border border-[#1b222c] px-3 py-1.5 text-xs text-[#c3d4e8];
+    background-color: rgba(11, 13, 16, 0.78);
+  }
+
+  .notifications-read-button:disabled {
+    @apply opacity-50 cursor-not-allowed;
+  }
+
+  .notification-feed-item {
+    @apply relative;
+  }
+
+  .notification-feed-item.is-unread .post-card {
+    border-color: rgba(109, 214, 255, 0.35);
+    box-shadow: 0 24px 52px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(109, 214, 255, 0.12);
+  }
+
+  .notification-chip {
+    @apply absolute top-3 right-5 rounded-full px-2 py-0.5 text-[10px] uppercase tracking-[0.08em] text-[#bbf0ff];
+    background-color: rgba(12, 23, 30, 0.94);
+    border: 1px solid rgba(109, 214, 255, 0.34);
+  }
+
   .search-form,
   .search-results,
   .profile-edit-form {
