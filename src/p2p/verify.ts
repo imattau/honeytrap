@@ -4,7 +4,7 @@ const workerPool = new HashWorkerPool();
 const WORKER_THRESHOLD_BYTES = 1024 * 1024 * 2;
 
 export async function sha256Hex(data: ArrayBuffer | Uint8Array): Promise<string> {
-  const buffer = data instanceof ArrayBuffer ? data : data.slice().buffer;
+  const buffer = data instanceof ArrayBuffer ? data.slice(0) : data.slice().buffer;
   if (buffer.byteLength >= WORKER_THRESHOLD_BYTES) {
     return workerPool.hash(buffer);
   }

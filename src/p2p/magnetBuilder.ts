@@ -67,7 +67,10 @@ export class MagnetBuilder {
         this.registry?.start({
           magnet,
           mode: 'seed',
-          name: torrent.name
+          name: torrent.name,
+          eventId: meta?.eventId,
+          authorPubkey: meta?.authorPubkey,
+          availableUntil: meta?.availableUntil
         });
         const update = () => {
           this.registry?.update(magnet, {

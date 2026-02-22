@@ -43,15 +43,15 @@ export function useP2PState({
 
   const torrentRegistry = useMemo(() => new TorrentRegistry(), []);
   const webtorrentHub = useMemo(() => new WebTorrentHub(settings.p2p), []);
-  const mediaAssist = useMemo(() => new MediaAssist(settings.p2p, torrentRegistry, webtorrentHub), [settings.p2p, torrentRegistry, webtorrentHub]);
-  const magnetBuilder = useMemo(() => new MagnetBuilder(settings.p2p, torrentRegistry, webtorrentHub), [settings.p2p, torrentRegistry, webtorrentHub]);
+  const mediaAssist = useMemo(() => new MediaAssist(settings.p2p, torrentRegistry, webtorrentHub), [torrentRegistry, webtorrentHub]);
+  const magnetBuilder = useMemo(() => new MagnetBuilder(settings.p2p, torrentRegistry, webtorrentHub), [torrentRegistry, webtorrentHub]);
   const torrentListService = useMemo(
     () => new TorrentListService(nostr, signer, nip44Cipher),
     [nostr, signer, nip44Cipher]
   );
   const eventAssist = useMemo(
     () => new EventAssistService(settings.p2p, torrentRegistry, webtorrentHub),
-    [settings.p2p, torrentRegistry, webtorrentHub]
+    [torrentRegistry, webtorrentHub]
   );
   const settingsListService = useMemo(
     () => new P2PSettingsListService(nostr, signer, nip44Cipher),
