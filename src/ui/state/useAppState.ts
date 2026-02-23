@@ -63,7 +63,6 @@ export function useAppState() {
 
     // P2P
     torrents: p2pCtx.torrents,
-    canEncryptNip44: p2pCtx.canEncryptNip44,
     loadMedia: p2pCtx.loadMedia,
     seedMediaFile: p2pCtx.seedMediaFile,
     seedEvent: p2pCtx.seedEvent,

@@ -18,7 +18,7 @@ function formatBytes(bytes: number): string {
 }
 
 export function TorrentSection({ value, onChange, onSave, saved }: TorrentSectionProps) {
-  const { torrents, canEncryptNip44, reseedTorrent } = useAppState();
+  const { torrents, reseedTorrent } = useAppState();
   const [showAll, setShowAll] = React.useState(false);
   const [reseeding, setReseeding] = React.useState<Record<string, boolean>>({});
   const reseedDisabled = !value.enabled;
@@ -129,11 +129,6 @@ export function TorrentSection({ value, onChange, onSave, saved }: TorrentSectio
           onChange={(event) => onChange({ iceServers: event.target.value.split(/\n|,/).map((s) => s.trim()).filter(Boolean) })}
         />
       </div>
-      {!canEncryptNip44 && (
-        <div className="menu-sub">
-          Encrypted torrent list is best-effort. Remote signer support is planned.
-        </div>
-      )}
       <div className="menu-sub">
         Public seeding index helps other Honeytrap clients discover magnet links when posts omit them.
       </div>

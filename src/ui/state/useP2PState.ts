@@ -7,8 +7,6 @@ import type { Torrent } from 'webtorrent';
 import { MediaAssist } from '../../p2p/mediaAssist';
 import { MagnetBuilder } from '../../p2p/magnetBuilder';
 import { TorrentRegistry, type TorrentSnapshot, type TorrentStatus } from '../../p2p/registry';
-import { TorrentSyncService } from '../../p2p/torrentSync';
-import { TorrentListService } from '../../nostr/torrentList';
 import type { Nip44Cipher } from '../../nostr/nip44';
 import type { AssistSource } from '../../p2p/types';
 import type { NostrEvent } from '../../nostr/types';
@@ -46,7 +44,6 @@ export function useP2PState({
   const AUTOJOIN_ABSOLUTE_MAX = 80;
 
   const [torrentSnapshot, setTorrentSnapshot] = useState<TorrentSnapshot>({});
-  const [canEncryptNip44, setCanEncryptNip44] = useState(false);
   const settingsRef = useRef(settings);
   const keysRef = useRef(keysNpub);
   const torrentSnapshotRef = useRef(torrentSnapshot);
@@ -60,10 +57,6 @@ export function useP2PState({
   const webtorrentHub = useMemo(() => new WebTorrentHub(settings.p2p), []);
   const mediaAssist = useMemo(() => new MediaAssist(settings.p2p, torrentRegistry, webtorrentHub), [torrentRegistry, webtorrentHub]);
   const magnetBuilder = useMemo(() => new MagnetBuilder(settings.p2p, torrentRegistry, webtorrentHub), [torrentRegistry, webtorrentHub]);
-  const torrentListService = useMemo(
-    () => new TorrentListService(nostr, signer, nip44Cipher),
-    [nostr, signer, nip44Cipher]
-  );
   const eventAssist = useMemo(
     () => new EventAssistService(settings.p2p, torrentRegistry, webtorrentHub),
     [torrentRegistry, webtorrentHub]
@@ -80,10 +73,7 @@ export function useP2PState({
     if (!settingsRef.current.p2p.enabled || !settingsRef.current.p2p.publishSeedingList) return;
     await seedingListService.publish(items);
   }, [seedingListService]);
-  const torrentSync = useMemo(
-    () => new TorrentSyncService(torrentListService, publishSeedingList),
-    [torrentListService, publishSeedingList]
-  );
+  const publishTimerRef = useRef<ReturnType<typeof setTimeout>>();
 
   useEffect(() => {
     mediaAssist.updateSettings(settings.p2p);
@@ -118,75 +108,6 @@ export function useP2PState({
     torrentSnapshotRef.current = torrentSnapshot;
   }, [torrentSnapshot]);
 
-  useEffect(() => {
-    if (!keysNpub) {
-      torrentSync.reset();
-      return;
-    }
-    let active = true;
-    torrentSync.hydrate(keysNpub, (snapshot) => {
-      if (!active) return;
-      torrentRegistry.setAll(Object.values(snapshot));
-      if (!settingsRef.current.p2p.enabled) return;
-      const now = Date.now();
-      Object.values(snapshot).forEach((item) => {
-        if (item.availableUntil && now > item.availableUntil) return;
-        if (item.mode === 'seed') {
-          torrentRegistry.start({ magnet: item.magnet, mode: 'seed', name: item.name, eventId: item.eventId, authorPubkey: item.authorPubkey, availableUntil: item.availableUntil });
-          if (item.eventId) {
-            // Re-seed from cached event bytes so we act as a seeder, not a leecher
-            cache.getEvent(item.eventId).then((event) => {
-              if (!active || !event) return;
-              magnetBuilder.buildEventPackage(event).then((result) => {
-                if (!active || !result.magnet) return;
-                transportStore.mark(item.eventId!, { p2p: true });
-              }).catch(() => undefined);
-            }).catch(() => undefined);
-          } else {
-            try {
-              webtorrentHub.ensure(item.magnet, (torrent) => {
-                torrentRegistry.update(item.magnet, { name: torrent.name });
-                const update = () => torrentRegistry.update(item.magnet, {
-                  peers: torrent.numPeers,
-                  progress: torrent.progress,
-                  downloaded: torrent.downloaded,
-                  uploaded: torrent.uploaded
-                });
-                torrent.on('download', update);
-                torrent.on('upload', update);
-                torrent.on('wire', update);
-                torrent.on('noPeers', update);
-                torrent.on('done', update);
-                torrent.on('error', () => torrentRegistry.finish(item.magnet));
-                torrent.on('close', () => torrentRegistry.finish(item.magnet));
-              });
-            } catch {
-              // WebTorrent client not ready; skip this torrent for now
-            }
-          }
-        } else if (item.url?.startsWith('http')) {
-          const source: AssistSource = {
-            url: item.url,
-            magnet: item.magnet,
-            sha256: undefined,
-            type: 'media',
-            eventId: item.eventId,
-            authorPubkey: item.authorPubkey,
-            availableUntil: item.availableUntil
-          };
-          mediaAssist.ensureWebSeed(source, true);
-        }
-      });
-    }).catch(() => null);
-    return () => {
-      active = false;
-    };
-  }, [keysNpub, torrentSync, torrentRegistry, webtorrentHub, mediaAssist]);
-
-  useEffect(() => {
-    if (!keysNpub) return;
-    torrentSync.schedulePublish(keysNpub, torrentSnapshot);
-  }, [keysNpub, torrentSnapshot, torrentSync]);
 
   const attachTorrentMetrics = useCallback((magnet: string, torrent: Torrent) => {
     if (trackedTorrentsRef.current.has(torrent)) return;
@@ -206,6 +127,66 @@ export function useP2PState({
     torrent.on('error', () => torrentRegistry.finish(magnet));
     torrent.on('close', () => torrentRegistry.finish(magnet));
   }, [torrentRegistry]);
+
+  // Restore seeding state on startup from the public seeding list
+  useEffect(() => {
+    if (!keysNpub) return;
+    let active = true;
+    seedingListService.load(keysNpub, true).then((hints) => {
+      if (!active || !settingsRef.current.p2p.enabled) return;
+      const now = Date.now();
+      hints.forEach((hint) => {
+        if (hint.mode !== 'seed') return;
+        if (hint.availableUntil && now > hint.availableUntil) return;
+        torrentRegistry.start({
+          magnet: hint.magnet,
+          mode: 'seed',
+          eventId: hint.eventId,
+          authorPubkey: hint.authorPubkey,
+          availableUntil: hint.availableUntil,
+          url: hint.url
+        });
+        if (hint.url?.startsWith('http')) {
+          const source: AssistSource = {
+            url: hint.url,
+            magnet: hint.magnet,
+            sha256: undefined,
+            type: 'media',
+            eventId: hint.eventId,
+            authorPubkey: hint.authorPubkey,
+            availableUntil: hint.availableUntil
+          };
+          mediaAssist.ensureWebSeed(source, true);
+        } else {
+          try {
+            webtorrentHub.ensure(hint.magnet, (torrent) => {
+              torrentRegistry.update(hint.magnet, { name: torrent.name });
+              attachTorrentMetrics(hint.magnet, torrent);
+            });
+          } catch {
+            // WebTorrent client not ready
+          }
+        }
+      });
+    }).catch(() => null);
+    return () => { active = false; };
+  }, [keysNpub, torrentRegistry, webtorrentHub, mediaAssist, seedingListService, attachTorrentMetrics]);
+
+  // Debounced publish of seeding list whenever snapshot changes
+  useEffect(() => {
+    if (!keysNpub) return;
+    if (publishTimerRef.current) clearTimeout(publishTimerRef.current);
+    const now = Date.now();
+    const items = Object.values(torrentSnapshot)
+      .filter(item => item.availableUntil === undefined || now <= item.availableUntil)
+      .sort((a, b) => b.updatedAt - a.updatedAt)
+      .slice(0, 100);
+    if (items.length === 0) return;
+    publishTimerRef.current = setTimeout(() => {
+      publishTimerRef.current = undefined;
+      publishSeedingList(items).catch(() => null);
+    }, 3_000);
+  }, [keysNpub, torrentSnapshot, publishSeedingList]);
 
   const canAccessAuthor = useCallback((authorPubkey?: string) => {
     if (!authorPubkey) return false;
@@ -320,10 +301,6 @@ export function useP2PState({
       window.clearInterval(timer);
     };
   }, [canAccessAuthor, ensureFromSeedingHint, seedingListService, AUTOJOIN_COOLDOWN_MS, DISCOVERED_AUTHOR_TTL_MS, MAX_HINTS_PER_AUTHOR, MAX_SEEDING_AUTHORS_PER_SCAN, SEEDING_DISCOVERY_INTERVAL_MS]);
-
-  useEffect(() => {
-    setCanEncryptNip44(nip44Cipher.canEncrypt());
-  }, [nip44Cipher]);
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -511,7 +488,6 @@ export function useP2PState({
   return {
     torrentRegistry,
     torrentSnapshot,
-    canEncryptNip44,
     mediaAssist,
     magnetBuilder,
     loadMedia,

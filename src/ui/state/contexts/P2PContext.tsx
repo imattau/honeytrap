@@ -12,7 +12,6 @@ import { MediaUploadService } from '../../../nostr/mediaUpload';
 
 interface P2PContextValue {
   torrents: TorrentSnapshot;
-  canEncryptNip44: boolean;
   loadMedia: (input: {
     eventId: string;
     source: AssistSource;
@@ -35,7 +34,7 @@ export function P2PProvider({ children }: { children: React.ReactNode }) {
   const { nostr, cache } = useNostr();
   const { transportStore } = useTransport();
 
-  const { torrentSnapshot, canEncryptNip44, magnetBuilder, loadMedia, seedMediaFile, seedEvent, reseedTorrent, assistEvent, loadP2PSettings, publishP2PSettings } = useP2PState({
+  const { torrentSnapshot, magnetBuilder, loadMedia, seedMediaFile, seedEvent, reseedTorrent, assistEvent, loadP2PSettings, publishP2PSettings } = useP2PState({
     settings,
     nostr,
     cache,
@@ -78,7 +77,6 @@ export function P2PProvider({ children }: { children: React.ReactNode }) {
 
   const value = useMemo(() => ({
     torrents: torrentSnapshot,
-    canEncryptNip44,
     loadMedia,
     seedMediaFile,
     seedEvent,
@@ -86,7 +84,7 @@ export function P2PProvider({ children }: { children: React.ReactNode }) {
     assistEvent,
     attachMedia,
     uploadMedia
-  }), [torrentSnapshot, canEncryptNip44, loadMedia, seedMediaFile, seedEvent, reseedTorrent, assistEvent, attachMedia, uploadMedia]);
+  }), [torrentSnapshot, loadMedia, seedMediaFile, seedEvent, reseedTorrent, assistEvent, attachMedia, uploadMedia]);
 
   return (
     <P2PContext.Provider value={value}>
